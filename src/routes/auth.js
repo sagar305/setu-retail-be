@@ -22,14 +22,24 @@ router.post('/signup', async (req, res) => {
     });
     await tenant.save();
 
-    const adminRole = await Role.findOne({ name: 'owner' });
+    let adminRole = await Role.findOne({ name: 'owner' });
+    if (!adminRole) {
+      adminRole = new Role({
+        name: 'owner',
+        description: 'Owner role',
+        permissions: [],
+        tenantId: tenant._id,
+      });
+      await adminRole.save();
+    }
+
     const user = new User({
       tenantId: tenant._id,
       name: businessName,
       email,
       phone,
       password,
-      role: adminRole?._id,
+      role: adminRole._id,
     });
     await user.save();
 
