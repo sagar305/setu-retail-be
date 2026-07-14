@@ -111,6 +111,21 @@ exports.updateCoupon = async (req, res) => {
   }
 };
 
+exports.getCouponById = async (req, res) => {
+  try {
+    const coupon = await Coupon.findOne({
+      _id: req.params.id,
+      tenantId: req.tenantId,
+    });
+
+    if (!coupon) return res.status(404).json({ message: 'Coupon not found' });
+
+    res.json(coupon);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 exports.deactivateCoupon = async (req, res) => {
   try {
     const coupon = await Coupon.findOneAndUpdate(
