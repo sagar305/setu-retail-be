@@ -20,6 +20,8 @@ app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
 app.use('/api/invoices', authMiddleware, require('./routes/invoices'));
 app.use('/api/inventory', authMiddleware, require('./routes/inventory'));
 app.use('/api/purchase-orders', authMiddleware, require('./routes/purchaseOrders'));
+app.use('/api/stock-transfers', authMiddleware, require('./routes/stockTransfers'));
+app.use('/api/expenses', authMiddleware, require('./routes/expenses'));
 app.use('/api/settings', authMiddleware, require('./routes/settings'));
 app.use('/api/users', authMiddleware, require('./routes/users'));
 app.use('/api/roles', authMiddleware, require('./routes/roles'));
