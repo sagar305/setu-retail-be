@@ -46,7 +46,8 @@ router.post('/signup', async (req, res) => {
     const token = generateToken(user._id, tenant._id, 'owner');
     res.status(201).json({ token, user, tenant });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Signup error:', error);
+    res.status(500).json({ message: error.message, stack: error.stack });
   }
 });
 
