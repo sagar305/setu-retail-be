@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
+const Role = require('../models/Role');
 const { generateToken } = require('../utils/jwt');
 
 router.post('/signup', async (req, res) => {
@@ -21,13 +22,14 @@ router.post('/signup', async (req, res) => {
     });
     await tenant.save();
 
+    const adminRole = await Role.findOne({ name: 'owner' });
     const user = new User({
       tenantId: tenant._id,
       name: businessName,
       email,
       phone,
       password,
-      role: null,
+      role: adminRole?._id,
     });
     await user.save();
 
