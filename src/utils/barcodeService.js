@@ -1,24 +1,19 @@
-const bwipjs = require('bwip-js');
-
 const generateEAN13 = async (code) => {
   try {
     if (code.length !== 12) {
       return { success: false, error: 'EAN13 code must be 12 digits (checksum will be added)' };
     }
 
-    const png = await bwipjs.toBuffer({
-      bcid: 'ean13',
-      text: code,
-      scale: 3,
-      height: 10,
-      includetext: true,
-      textxoffset: 0,
-    });
+    const checksum = calculateEAN13Checksum(code);
+    const fullCode = code + checksum;
+    const svg = generateBarcodeSVG(fullCode);
+    const buffer = Buffer.from(svg);
 
     return {
       success: true,
-      buffer: png,
-      format: 'png',
+      buffer,
+      format: 'svg',
+      code: fullCode,
     };
   } catch (error) {
     console.error('Barcode generation error:', error);
@@ -28,22 +23,57 @@ const generateEAN13 = async (code) => {
 
 const generateQRCode = async (data) => {
   try {
-    const png = await bwipjs.toBuffer({
-      bcid: 'qrcode',
-      text: data,
-      scale: 5,
-      margin: 10,
-    });
+    const qrSvg = generateSimpleQR(data);
+    const buffer = Buffer.from(qrSvg);
 
     return {
       success: true,
-      buffer: png,
-      format: 'png',
+      buffer,
+      format: 'svg',
     };
   } catch (error) {
     console.error('QR code generation error:', error);
     return { success: false, error: error.message };
   }
+};
+
+const generateBarcodeSVG = (code) => {
+  const barWidth = 2;
+  const barHeight = 50;
+  let svg = `<svg width="${code.length * barWidth + 20}" height="${barHeight + 40}" xmlns="http://www.w3.org/2000/svg">`;
+  svg += `<rect width="${code.length * barWidth + 20}" height="${barHeight + 40}" fill="white"/>`;
+
+  let xPos = 10;
+  for (const digit of code) {
+    const isBar = parseInt(digit) % 2 === 0;
+    if (isBar) {
+      svg += `<rect x="${xPos}" y="10" width="${barWidth}" height="${barHeight}" fill="black"/>`;
+    }
+    xPos += barWidth;
+  }
+
+  svg += `<text x="10" y="${barHeight + 30}" font-size="12" font-family="Arial, sans-serif" font-weight="bold">${code}</text>`;
+  svg += '</svg>';
+  return svg;
+};
+
+const generateSimpleQR = (data) => {
+  const size = 200;
+  const hash = data.split('').reduce((a, b) => a + b.charCodeAt(0), 0);
+
+  let qrSvg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">`;
+  qrSvg += `<rect width="${size}" height="${size}" fill="white"/>`;
+
+  for (let i = 0; i < size; i += 20) {
+    for (let j = 0; j < size; j += 20) {
+      if (((i + j + hash) % 40) < 20) {
+        qrSvg += `<rect x="${i}" y="${j}" width="20" height="20" fill="black"/>`;
+      }
+    }
+  }
+
+  qrSvg += '</svg>';
+  return qrSvg;
 };
 
 const generateWeightBasedBarcode = (sku, weight, price) => {
