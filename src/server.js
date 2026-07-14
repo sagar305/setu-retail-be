@@ -27,6 +27,8 @@ app.use('/api/coupons', authMiddleware, require('./routes/coupons'));
 app.use('/api/offers', authMiddleware, require('./routes/offers'));
 app.use('/api/memberships', authMiddleware, require('./routes/memberships'));
 app.use('/api/pricing-rules', authMiddleware, require('./routes/pricingRules'));
+app.use('/api/offline-sync', authMiddleware, require('./routes/offlineSync'));
+app.use('/api/barcode', authMiddleware, require('./routes/barcode'));
 app.use('/api/settings', authMiddleware, require('./routes/settings'));
 app.use('/api/users', authMiddleware, require('./routes/users'));
 app.use('/api/roles', authMiddleware, require('./routes/roles'));
