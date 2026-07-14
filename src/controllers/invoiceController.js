@@ -3,6 +3,7 @@ const Inventory = require('../models/Inventory');
 const Customer = require('../models/Customer');
 const Coupon = require('../models/Coupon');
 const Product = require('../models/Product');
+const sseService = require('../utils/sseService');
 
 exports.createInvoice = async (req, res) => {
   try {
@@ -120,6 +121,14 @@ exports.createInvoice = async (req, res) => {
     });
 
     await invoice.save();
+
+    // Broadcast SSE event
+    sseService.broadcastToTenant(req.tenantId, 'invoice:created', {
+      invoiceNumber: invoice.invoiceNumber,
+      amount: invoice.grandTotal,
+      outlet,
+      timestamp: new Date().toISOString(),
+    });
 
     // Update customer reward points and purchase history
     if (customer) {
