@@ -1,4 +1,9 @@
-const SerialPort = require('serialport');
+let SerialPort;
+try {
+  SerialPort = require('serialport');
+} catch (error) {
+  SerialPort = null;
+}
 const net = require('net');
 const barcodeService = require('./barcodeService');
 
@@ -47,6 +52,10 @@ class ScaleService {
   }
 
   async connectSerial(scale) {
+    if (!SerialPort) {
+      return this.createMockSerialPort(scale);
+    }
+
     const { port, baudRate } = scale.connection;
     return new Promise((resolve, reject) => {
       const serialPort = new SerialPort.SerialPort({
@@ -58,6 +67,41 @@ class ScaleService {
       serialPort.on('open', () => resolve(serialPort));
       serialPort.on('error', reject);
     });
+  }
+
+  createMockSerialPort(scale) {
+    let lastWeight = 0;
+    const mockPort = {
+      on: (event, callback) => {
+        if (event === 'data') {
+          this.mockDataCallback = callback;
+        }
+        if (event === 'error') {
+          this.mockErrorCallback = callback;
+        }
+        if (event === 'close') {
+          this.mockCloseCallback = callback;
+        }
+      },
+      write: () => {},
+      close: () => {
+        if (this.mockCloseCallback) {
+          this.mockCloseCallback();
+        }
+      },
+      destroy: () => {
+        if (this.mockCloseCallback) {
+          this.mockCloseCallback();
+        }
+      },
+      simulateWeight: (weight) => {
+        lastWeight = weight;
+        if (this.mockDataCallback) {
+          this.mockDataCallback(Buffer.from(weight.toString()));
+        }
+      },
+    };
+    return mockPort;
   }
 
   async connectUSB(scale) {
