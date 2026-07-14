@@ -32,6 +32,7 @@ app.use('/api/barcode', authMiddleware, require('./routes/barcode'));
 app.use('/api/settings', authMiddleware, require('./routes/settings'));
 app.use('/api/users', authMiddleware, require('./routes/users'));
 app.use('/api/roles', authMiddleware, require('./routes/roles'));
+app.use('/api/scales', authMiddleware, require('./routes/scales'));
 
 app.use((err, req, res, next) => {
   console.error(err);
