@@ -7,7 +7,9 @@ const authMiddleware = require('./middleware/auth');
 
 const app = express();
 
-connectDB();
+(async () => {
+  await connectDB();
+})();
 
 app.use(cors());
 app.use(express.json());
