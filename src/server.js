@@ -20,6 +20,7 @@ app.use(express.json());
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/dashboard', authMiddleware, require('./routes/dashboard'));
 app.use('/api/outlets', authMiddleware, require('./routes/outlets'));
 app.use('/api/categories', authMiddleware, require('./routes/categories'));
 app.use('/api/notifications', authMiddleware, require('./routes/notifications'));
