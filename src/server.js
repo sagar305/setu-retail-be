@@ -20,6 +20,9 @@ app.use(express.json());
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/outlets', authMiddleware, require('./routes/outlets'));
+app.use('/api/categories', authMiddleware, require('./routes/categories'));
+app.use('/api/notifications', authMiddleware, require('./routes/notifications'));
 app.use('/api/products', authMiddleware, require('./routes/products'));
 app.use('/api/customers', authMiddleware, require('./routes/customers'));
 app.use('/api/suppliers', authMiddleware, require('./routes/suppliers'));
