@@ -28,7 +28,7 @@ exports.createRole = async (req, res) => {
       name,
       description,
       permissions,
-      isCustom: true,
+      isPreDefined: false,
     });
 
     await role.save();
@@ -62,7 +62,7 @@ exports.updateRole = async (req, res) => {
 
     if (!role) return res.status(404).json({ message: 'Role not found' });
 
-    if (!role.isCustom) {
+    if (role.isPreDefined) {
       return res.status(400).json({ message: 'Cannot modify predefined roles' });
     }
 
@@ -84,7 +84,7 @@ exports.deleteRole = async (req, res) => {
 
     if (!role) return res.status(404).json({ message: 'Role not found' });
 
-    if (!role.isCustom) {
+    if (role.isPreDefined) {
       return res.status(400).json({ message: 'Cannot delete predefined roles' });
     }
 
