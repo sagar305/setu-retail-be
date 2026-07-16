@@ -41,39 +41,11 @@ const tenantSchema = new mongoose.Schema({
     startDate: Date,
     endDate: Date,
   },
+  // Free-form settings bag: sections are managed by the Settings page
+  // (business, branding, tax, inventory, printer, cashDrawer, localization, audit, barcodeScale)
   settings: {
-    currency: {
-      type: String,
-      default: 'INR',
-    },
-    timezone: {
-      type: String,
-      default: 'Asia/Kolkata',
-    },
-    dateFormat: {
-      type: String,
-      default: 'DD/MM/YYYY',
-    },
-    language: {
-      type: String,
-      default: 'en',
-    },
-    sessionTimeout: {
-      type: Number,
-      default: 10,
-    },
-    offlineMode: {
-      type: Boolean,
-      default: true,
-    },
-    lowStockNotification: {
-      enabled: Boolean,
-      frequency: String,
-    },
-    expiryNotification: {
-      enabled: Boolean,
-      days: Number,
-    },
+    type: mongoose.Schema.Types.Mixed,
+    default: {},
   },
   isActive: {
     type: Boolean,

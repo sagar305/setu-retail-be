@@ -14,7 +14,23 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { email, name, phone, roleId, outlet } = req.body;
+    const { email, name, phone, roleId, role, outlet } = req.body;
+
+    const existing = await User.findOne({ tenantId: req.tenantId, email });
+    if (existing) {
+      return res.status(400).json({ message: 'An employee with this email already exists' });
+    }
+
+    // Accept either a Role id or a role name ("cashier")
+    let resolvedRoleId = roleId;
+    if (!resolvedRoleId && role) {
+      const roleDoc = await Role.findOne({
+        tenantId: req.tenantId,
+        name: { $regex: `^${role}$`, $options: 'i' },
+      });
+      resolvedRoleId = roleDoc?._id;
+    }
+
     const tempPassword = Math.random().toString(36).slice(-8);
 
     const user = new User({
@@ -23,7 +39,7 @@ router.post('/', async (req, res) => {
       name,
       phone,
       password: tempPassword,
-      role: roleId,
+      role: resolvedRoleId,
       outlet,
     });
     await user.save();

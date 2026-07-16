@@ -12,14 +12,17 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Merges the posted section(s) into existing settings so saving one
+// section never wipes the others
 router.put('/', async (req, res) => {
   try {
-    const tenant = await Tenant.findByIdAndUpdate(
-      req.tenantId,
-      { settings: req.body },
-      { new: true }
-    );
+    const tenant = await Tenant.findById(req.tenantId);
     if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
+
+    tenant.settings = { ...(tenant.settings || {}), ...req.body };
+    tenant.markModified('settings');
+    await tenant.save();
+
     res.json(tenant.settings);
   } catch (error) {
     res.status(500).json({ message: error.message });

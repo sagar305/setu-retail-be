@@ -2,7 +2,8 @@ const express = require('express');
 const router = express.Router();
 const Invoice = require('../models/Invoice');
 const Expense = require('../models/Expense');
-const Product = require('../models/Product');
+const Inventory = require('../models/Inventory');
+const Supplier = require('../models/Supplier');
 
 router.get('/', async (req, res) => {
   try {
@@ -38,6 +39,45 @@ router.get('/', async (req, res) => {
     const monthSales = calculateTotal(monthInvoices);
     const yearSales = calculateTotal(yearInvoices);
 
+    // Previous-period comparisons ("to date" ranges so they're fair)
+    const inRange = (start, end) => allInvoices.filter(inv => {
+      const d = new Date(inv.createdAt);
+      return d >= start && d < end;
+    });
+
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayInvoices = inRange(yesterday, today);
+    const yesterdaySales = calculateTotal(yesterdayInvoices);
+
+    const prevWeekStart = new Date(weekStart);
+    prevWeekStart.setDate(weekStart.getDate() - 7);
+    const prevWeekSales = calculateTotal(inRange(prevWeekStart, weekStart));
+
+    const now = new Date();
+    const prevMonthStart = new Date(monthStart);
+    prevMonthStart.setMonth(monthStart.getMonth() - 1);
+    const prevMonthSameDay = new Date(now);
+    prevMonthSameDay.setMonth(now.getMonth() - 1);
+    const prevMonthSales = calculateTotal(inRange(prevMonthStart, prevMonthSameDay));
+
+    const prevYearStart = new Date(yearStart);
+    prevYearStart.setFullYear(yearStart.getFullYear() - 1);
+    const prevYearSameDay = new Date(now);
+    prevYearSameDay.setFullYear(now.getFullYear() - 1);
+    const prevYearSales = calculateTotal(inRange(prevYearStart, prevYearSameDay));
+
+    // Returns null when there's no previous data to compare against
+    const pctChange = (current, previous) => {
+      if (!previous) return null;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+
+    const yesterdayAvgBasket = yesterdayInvoices.length > 0
+      ? yesterdaySales / yesterdayInvoices.length
+      : 0;
+    const todayAvgBasket = todayInvoices.length > 0 ? todaySales / todayInvoices.length : 0;
+
     // Calculate expenses
     const expenses = await Expense.find({ tenantId, date: { $gte: monthStart } });
     const totalExpenses = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
@@ -66,19 +106,25 @@ router.get('/', async (req, res) => {
       });
     }
 
-    // Get low stock products
-    const lowStockProducts = await Product.find({
-      tenantId,
-      currentStock: { $lte: '$minimumStock' },
-      isActive: true,
-    }).limit(6);
+    // Low / out of stock from Inventory (stock lives there, not on Product)
+    const inventoryDocs = await Inventory.find({ tenantId }).populate('productId');
+    const lowStockProducts = [];
+    const outOfStockProducts = [];
+    inventoryDocs.forEach(inv => {
+      const product = inv.productId;
+      if (!product) return;
+      const minStock = product.inventory?.minimumStock || 0;
+      if (inv.currentStock === 0) {
+        outOfStockProducts.push({ name: product.name, sku: product.sku, currentStock: 0 });
+      } else if (inv.currentStock <= minStock) {
+        lowStockProducts.push({ name: product.name, sku: product.sku, currentStock: inv.currentStock, minimumStock: minStock });
+      }
+    });
 
-    // Get out of stock
-    const outOfStockProducts = await Product.find({
-      tenantId,
-      currentStock: 0,
-      isActive: true,
-    }).limit(3);
+    // Pending supplier payments
+    const suppliers = await Supplier.find({ tenantId, outstandingBalance: { $gt: 0 } });
+    const pendingPayments = suppliers.reduce((sum, s) => sum + (s.outstandingBalance || 0), 0);
+    const pendingSuppliersCount = suppliers.length;
 
     // Category performance
     const categoryStats = {};
@@ -120,13 +166,22 @@ router.get('/', async (req, res) => {
         profit,
         revenue: monthSales,
         expenses: totalExpenses,
-        pendingPayments: 2, // TODO: Calculate from supplier data
+        pendingPayments,
+        pendingSuppliersCount,
       },
       metrics: {
         transactions: todayInvoices.length,
         avgBasket: todayInvoices.length > 0 ? Math.round(todaySales / todayInvoices.length) : 0,
         lowStockCount: lowStockProducts.length,
         outOfStockCount: outOfStockProducts.length,
+      },
+      changes: {
+        today: pctChange(todaySales, yesterdaySales),
+        week: pctChange(weekSales, prevWeekSales),
+        month: pctChange(monthSales, prevMonthSales),
+        year: pctChange(yearSales, prevYearSales),
+        transactions: pctChange(todayInvoices.length, yesterdayInvoices.length),
+        avgBasket: pctChange(todayAvgBasket, yesterdayAvgBasket),
       },
       inventory: {
         lowStockItems: lowStockProducts,
