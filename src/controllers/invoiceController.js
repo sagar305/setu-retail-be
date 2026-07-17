@@ -204,7 +204,10 @@ exports.getInvoiceById = async (req, res) => {
 
 exports.getSalesReport = async (req, res) => {
   try {
-    const { dateFrom, dateTo, outlet } = req.query;
+    // Accept both naming conventions (the frontend sends startDate/endDate/outletId)
+    const dateFrom = req.query.dateFrom || req.query.startDate;
+    const dateTo = req.query.dateTo || req.query.endDate;
+    const outlet = req.query.outlet || req.query.outletId;
     const filter = { tenantId: req.tenantId, status: 'completed' };
 
     if (outlet) filter.outlet = outlet;
@@ -221,16 +224,26 @@ exports.getSalesReport = async (req, res) => {
       totalRevenue: 0,
       totalTax: 0,
       totalDiscount: 0,
+      totalItems: 0,
       averageOrderValue: 0,
     };
 
+    const daily = {};
     invoices.forEach(inv => {
-      report.totalRevenue += inv.grandTotal;
+      report.totalRevenue += inv.grandTotal || 0;
       report.totalTax += inv.taxAmount || 0;
       report.totalDiscount += (inv.itemDiscount || 0) + (inv.cartDiscount || 0) + (inv.couponDiscount || 0);
+      report.totalItems += (inv.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0);
+
+      const day = new Date(inv.invoiceDate || inv.createdAt).toISOString().slice(0, 10);
+      daily[day] = (daily[day] || 0) + (inv.grandTotal || 0);
     });
 
     report.averageOrderValue = report.totalInvoices > 0 ? report.totalRevenue / report.totalInvoices : 0;
+    report.totalSales = report.totalRevenue;
+    report.dailySummary = Object.entries(daily)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, totalAmount]) => ({ date, totalAmount }));
 
     res.json(report);
   } catch (error) {
@@ -240,7 +253,10 @@ exports.getSalesReport = async (req, res) => {
 
 exports.getTopSellingProducts = async (req, res) => {
   try {
-    const { dateFrom, dateTo, limit = 10, outlet } = req.query;
+    const { limit = 10 } = req.query;
+    const dateFrom = req.query.dateFrom || req.query.startDate;
+    const dateTo = req.query.dateTo || req.query.endDate;
+    const outlet = req.query.outlet || req.query.outletId;
     const filter = { tenantId: req.tenantId, status: 'completed' };
 
     if (outlet) filter.outlet = outlet;
@@ -255,6 +271,7 @@ exports.getTopSellingProducts = async (req, res) => {
     const productSales = {};
     invoices.forEach(inv => {
       inv.items.forEach(item => {
+        if (!item.product) return;
         const productId = item.product._id.toString();
         if (!productSales[productId]) {
           productSales[productId] = {
@@ -270,9 +287,19 @@ exports.getTopSellingProducts = async (req, res) => {
 
     const topProducts = Object.values(productSales)
       .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, parseInt(limit));
+      .slice(0, parseInt(limit))
+      .map((entry) => ({
+        productName: entry.product?.name || 'Unknown',
+        sku: entry.product?.sku,
+        quantity: entry.quantity,
+        revenue: entry.revenue,
+      }));
 
-    res.json(topProducts);
+    res.json({
+      topProducts,
+      totalRevenue: topProducts.reduce((sum, p) => sum + p.revenue, 0),
+      totalUnits: topProducts.reduce((sum, p) => sum + p.quantity, 0),
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

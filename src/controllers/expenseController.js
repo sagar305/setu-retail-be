@@ -174,11 +174,16 @@ exports.getExpenseStats = async (req, res) => {
 
     const expenses = await Expense.find(filter);
 
+    const totalAmount = expenses.reduce((sum, e) => sum + e.amount, 0);
     const stats = {
-      totalExpenses: expenses.length,
-      totalAmount: expenses.reduce((sum, e) => sum + e.amount, 0),
+      // Total approved spend in rupees (the UI renders this as currency)
+      totalExpenses: totalAmount,
+      totalAmount,
+      expenseCount: expenses.length,
       byCategory: {},
-      pending: await Expense.countDocuments({ tenantId: req.tenantId, status: 'pending' }),
+      pendingCount: await Expense.countDocuments({ tenantId: req.tenantId, status: 'pending' }),
+      approvedCount: await Expense.countDocuments({ tenantId: req.tenantId, status: 'approved' }),
+      rejectedCount: await Expense.countDocuments({ tenantId: req.tenantId, status: 'rejected' }),
     };
 
     expenses.forEach((expense) => {
