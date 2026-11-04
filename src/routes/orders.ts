@@ -10,11 +10,12 @@ import { CancelBody, HeldCartBody, OrderBody, ReturnBody } from "../schemas2.js"
 import { audit } from "../services/audit.js";
 import { branchFor, planLimit } from "./access.js";
 import { moveStock } from "./catalogue.js";
+import { blendedUnitCost, restoreToBatches, takeFromBatches } from "../services/batches.js";
 
 const pad = (n: number) => String(n).padStart(5, "0");
 
 const orderInclude = {
-  items: { orderBy: { position: "asc" } },
+  items: { orderBy: { position: "asc" }, include: { batches: { include: { batch: { select: { batchNo: true, expiry: true } } } } } },
   payments: true,
   creditNotes: { include: { items: true }, orderBy: { createdAt: "asc" } },
   counter: { select: { code: true, name: true } },
@@ -66,6 +67,7 @@ function orderDto(o: FullOrder, cashierName?: string) {
       igst: i.igst,
       total: i.total,
       returnedQtyMilli: i.returnedQtyMilli,
+      batches: i.batches.map((b) => ({ batchNo: b.batch.batchNo, expiry: b.batch.expiry ? b.batch.expiry.toISOString().slice(0, 10) : null, qtyMilli: b.qtyMilli })),
     })),
     payments: o.payments.map((p) => ({ methodId: p.methodId, methodName: p.methodName, kind: p.kind, amount: p.amount })),
     creditNotes: o.creditNotes.map((c) => ({
@@ -250,6 +252,19 @@ export function ordersRouter(ctx: Ctx): Router {
             await tx.inventoryLog.create({ data: { accountId: account.id, branchId: branch.id, productId, type: "SALE", changeMilli: -qty, stockAfterMilli: after, refId: created.id, userId: a.user.id } });
           }
         }
+        if (account.batchTracking) {
+          for (const item of created.items) {
+            const line = body.lines[item.position]!;
+            const p = byId.get(line.productId)!;
+            if (!p.trackStock) continue;
+            const { allocations, shortfall } = await takeFromBatches(tx, { branchId: branch.id, productId: p.id, qtyMilli: item.qtyMilli, preferredBatchId: line.batchId, fallbackCost: p.costPrice });
+            if (allocations.length) {
+              await tx.orderItemBatch.createMany({ data: allocations.map((x) => ({ orderItemId: item.id, batchId: x.batchId, qtyMilli: x.qtyMilli, unitCost: x.unitCost })) });
+              await tx.orderItem.update({ where: { id: item.id }, data: { unitCost: blendedUnitCost(allocations, shortfall, p.costPrice) } });
+            }
+          }
+          return tx.order.findUniqueOrThrow({ where: { id: created.id }, include: orderInclude });
+        }
         return created;
       });
     } catch (err) {
@@ -326,6 +341,7 @@ export function ordersRouter(ctx: Ctx): Router {
       for (const i of o.items) {
         if (i.productId && tracked.has(i.productId)) {
           await moveStock(tx, { accountId: a.account.id, branchId: o.branchId, productId: i.productId, change: i.qtyMilli, type: "CANCEL", refId: o.id, userId: a.user.id, note: `Cancelled ${o.invoiceNumber}` });
+          await restoreToBatches(tx, i.id, i.qtyMilli);
         }
       }
       await audit(tx, { accountId: a.account.id, userId: a.user.id, action: "order.cancelled", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, total: o.total, reason } });
@@ -393,6 +409,7 @@ export function ordersRouter(ctx: Ctx): Router {
       for (const l of lines) {
         if (l.item.productId && tracked.has(l.item.productId)) {
           await moveStock(tx, { accountId: a.account.id, branchId: branch.id, productId: l.item.productId, change: l.qtyMilli, type: "RETURN", refId: cn.id, userId: a.user.id, note: cn.number });
+          await restoreToBatches(tx, l.item.id, l.qtyMilli);
         }
       }
       await audit(tx, { accountId: a.account.id, userId: a.user.id, action: "order.returned", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, creditNote: cn.number, total: cn.total, reason: body.reason } });

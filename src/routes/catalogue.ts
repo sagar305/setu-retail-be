@@ -4,13 +4,14 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import type { Db } from "../db/types.js";
 import type { BranchProduct, InventoryChange, Prisma, Product } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
-import { BranchPriceBody, CategoryBody, ProductBody, ProductPatchBody, StockAdjustBody } from "../schemas2.js";
+import { BatchBody, BatchPatchBody, BranchPriceBody, CategoryBody, ProductBody, ProductPatchBody, StockAdjustBody } from "../schemas2.js";
+import { addToOpeningBatch, expiryStatus, fromDay, reconcileBatches, sortFefo, takeFromBatches, toDay } from "../services/batches.js";
 import { audit } from "../services/audit.js";
 import { branchFor, isStaffManager, planLimit } from "./access.js";
 
 export const DEFAULT_LOW_STOCK_MILLI = 5000;
 
-export function productDto(p: Product, bp: BranchProduct | undefined, showCost: boolean) {
+export function productDto(p: Product, bp: BranchProduct | undefined, showCost: boolean, nextExpiry?: string | null) {
   const lowAt = p.lowStockMilli ?? DEFAULT_LOW_STOCK_MILLI;
   const stockMilli = bp?.stockMilli ?? 0;
   return {
@@ -33,6 +34,7 @@ export function productDto(p: Product, bp: BranchProduct | undefined, showCost: 
     lowStockMilli: p.lowStockMilli,
     stockStatus: !p.trackStock ? "untracked" : stockMilli <= 0 ? "out" : stockMilli <= lowAt ? "low" : "ok",
     archived: p.archivedAt !== null,
+    nextExpiry: nextExpiry ?? null,
   } as const;
 }
 
@@ -62,6 +64,31 @@ export async function moveStock(
   return row.stockMilli;
 }
 
+async function nextExpiries(db: Db, branchId: string, productIds: string[]): Promise<Map<string, string>> {
+  if (!productIds.length) return new Map();
+  const rows = await db.batch.groupBy({ by: ["productId"], where: { branchId, productId: { in: productIds }, qtyMilli: { gt: 0 }, expiry: { not: null } }, _min: { expiry: true } });
+  return new Map(rows.filter((r) => r._min.expiry).map((r) => [r.productId, toDay(r._min.expiry)!]));
+}
+
+/** Today in the shop's time zone, as yyyy-mm-dd. */
+export function shopToday(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+export function batchDto(b: { id: string; productId: string; batchNo: string; expiry: Date | null; costPrice: number | null; qtyMilli: number; opening: boolean; receivedAt: Date }, today: string, showCost = true) {
+  return {
+    id: b.id,
+    productId: b.productId,
+    batchNo: b.batchNo,
+    expiry: toDay(b.expiry),
+    costPrice: showCost ? b.costPrice : null,
+    qtyMilli: b.qtyMilli,
+    opening: b.opening,
+    receivedAt: b.receivedAt.toISOString(),
+    status: expiryStatus(b.expiry, today),
+  };
+}
+
 async function findProduct(ctx: Ctx, a: AuthContext, id: unknown) {
   const p = await ctx.prisma.product.findFirst({ where: { id: String(id), accountId: a.account.id } });
   if (!p) throw new AppError(404, "not_found", "Product not found.");
@@ -70,7 +97,7 @@ async function findProduct(ctx: Ctx, a: AuthContext, id: unknown) {
 
 export function catalogueRouter(ctx: Ctx): Router {
   const router = Router();
-  router.use(["/categories", "/products"], authenticate(ctx), requireActivePlan);
+  router.use(["/categories", "/products", "/batches"], authenticate(ctx), requireActivePlan);
   const OM = requireRole("OWNER", "MANAGER");
 
   // ── Categories ──
@@ -118,7 +145,8 @@ export function catalogueRouter(ctx: Ctx): Router {
       ctx.prisma.product.count({ where }),
     ]);
     const showCost = isStaffManager(a);
-    res.json({ products: rows.map((p) => productDto(p, p.branches[0], showCost)), total });
+    const expiries = a.account.batchTracking ? await nextExpiries(ctx.prisma, branch.id, rows.map((r) => r.id)) : new Map<string, string>();
+    res.json({ products: rows.map((p) => productDto(p, p.branches[0], showCost, expiries.get(p.id))), total });
   });
 
   router.get("/products/:id", async (req, res) => {
@@ -150,7 +178,9 @@ export function catalogueRouter(ctx: Ctx): Router {
       }
       const p = await tx.product.create({ data: { ...body, accountId: a.account.id } });
       for (const o of openingStock ?? []) {
-        if (o.qtyMilli > 0) await moveStock(tx, { accountId: a.account.id, branchId: o.branchId, productId: p.id, change: o.qtyMilli, type: "OPENING", userId: a.user.id });
+        if (o.qtyMilli <= 0) continue;
+        await moveStock(tx, { accountId: a.account.id, branchId: o.branchId, productId: p.id, change: o.qtyMilli, type: "OPENING", userId: a.user.id });
+        if (a.account.batchTracking && p.trackStock) await addToOpeningBatch(tx, { accountId: a.account.id, branchId: o.branchId, productId: p.id, qtyMilli: o.qtyMilli, now: ctx.now() });
       }
       return p;
     });
@@ -198,7 +228,7 @@ export function catalogueRouter(ctx: Ctx): Router {
     const stock = await ctx.prisma.$transaction(async (tx) => {
       const current = (await tx.branchProduct.findUnique({ where: { branchId_productId: { branchId: branch.id, productId: p.id } } }))?.stockMilli ?? 0;
       const change = body.type === "ADD" ? body.qtyMilli : body.type === "REDUCE" ? -body.qtyMilli : body.qtyMilli - current;
-      return moveStock(tx, {
+      const after = await moveStock(tx, {
         accountId: a.account.id,
         branchId: branch.id,
         productId: p.id,
@@ -208,6 +238,12 @@ export function catalogueRouter(ctx: Ctx): Router {
         userId: a.user.id,
         set: body.type === "SET" ? body.qtyMilli : undefined,
       });
+      if (a.account.batchTracking && p.trackStock) {
+        if (body.type === "ADD") await addToOpeningBatch(tx, { accountId: a.account.id, branchId: branch.id, productId: p.id, qtyMilli: body.qtyMilli, now: ctx.now() });
+        else if (body.type === "REDUCE") await takeFromBatches(tx, { branchId: branch.id, productId: p.id, qtyMilli: body.qtyMilli, fallbackCost: p.costPrice });
+        else await reconcileBatches(tx, { accountId: a.account.id, branchId: branch.id, productId: p.id, stockMilli: after, now: ctx.now() });
+      }
+      return after;
     });
     res.json({ stockMilli: stock });
   });
@@ -219,6 +255,72 @@ export function catalogueRouter(ctx: Ctx): Router {
     const logs = await ctx.prisma.inventoryLog.findMany({ where: { productId: p.id, branchId: branch.id }, orderBy: { createdAt: "desc" }, take: 200 });
     res.json({
       history: logs.map((l) => ({ id: l.id, type: l.type, changeMilli: l.changeMilli, stockAfterMilli: l.stockAfterMilli, note: l.note, refId: l.refId, createdAt: l.createdAt.toISOString() })),
+    });
+  });
+
+  // ── Batches ──
+  router.get("/products/:id/batches", async (req, res) => {
+    const a = auth(req);
+    const p = await findProduct(ctx, a, req.params.id);
+    const branch = branchFor(a, req.query.branchId);
+    const rows = await ctx.prisma.batch.findMany({ where: { branchId: branch.id, productId: p.id, qtyMilli: { gt: 0 } } });
+    const today = shopToday(ctx.now(), a.account.timezone);
+    res.json({ batches: sortFefo(rows).map((b) => batchDto(b, today, isStaffManager(a))) });
+  });
+
+  router.post("/products/:id/batches", OM, async (req, res) => {
+    const a = auth(req);
+    if (!a.account.batchTracking) throw new AppError(400, "batches_off", "Turn on batch & expiry tracking in Settings first.");
+    const p = await findProduct(ctx, a, req.params.id);
+    if (!p.trackStock) throw new AppError(400, "not_tracked", "Stock isn't tracked for this product.");
+    const body = BatchBody.parse(req.body);
+    const branch = branchFor(a, body.branchId, true);
+    const batch = await ctx.prisma.$transaction(async (tx) => {
+      await moveStock(tx, { accountId: a.account.id, branchId: branch.id, productId: p.id, change: body.qtyMilli, type: "ADD", note: body.note || `Batch ${body.batchNo || "—"}`, userId: a.user.id });
+      return tx.batch.create({
+        data: {
+          accountId: a.account.id,
+          branchId: branch.id,
+          productId: p.id,
+          batchNo: body.batchNo ?? "",
+          expiry: body.expiry ? fromDay(body.expiry) : null,
+          costPrice: body.costPrice ?? null,
+          qtyMilli: body.qtyMilli,
+          note: body.note ?? "",
+          receivedAt: ctx.now(),
+        },
+      });
+    });
+    res.status(201).json({ batch: batchDto(batch, shopToday(ctx.now(), a.account.timezone)) });
+  });
+
+  router.patch("/batches/:id", OM, async (req, res) => {
+    const a = auth(req);
+    const body = BatchPatchBody.parse(req.body);
+    const found = await ctx.prisma.batch.findFirst({ where: { id: String(req.params.id), accountId: a.account.id } });
+    if (!found) throw new AppError(404, "not_found", "Batch not found.");
+    branchFor(a, found.branchId, true);
+    const b = await ctx.prisma.batch.update({
+      where: { id: found.id },
+      data: { batchNo: body.batchNo, costPrice: body.costPrice, expiry: body.expiry === undefined ? undefined : body.expiry ? fromDay(body.expiry) : null },
+    });
+    res.json({ batch: batchDto(b, shopToday(ctx.now(), a.account.timezone)) });
+  });
+
+  router.get("/batches/expiring", OM, async (req, res) => {
+    const a = auth(req);
+    const branchIds = typeof req.query.branchId === "string" ? [branchFor(a, req.query.branchId).id] : a.branches.map((b) => b.id);
+    const days = Math.min(Math.max(Number(req.query.days) || 90, 1), 365);
+    const today = shopToday(ctx.now(), a.account.timezone);
+    const until = new Date(fromDay(today).getTime() + days * 86_400_000);
+    const rows = await ctx.prisma.batch.findMany({
+      where: { accountId: a.account.id, branchId: { in: branchIds }, qtyMilli: { gt: 0 }, expiry: { not: null, lte: until } },
+      orderBy: { expiry: "asc" },
+      take: 1000,
+    });
+    const products = new Map((await ctx.prisma.product.findMany({ where: { id: { in: [...new Set(rows.map((r) => r.productId))] } }, select: { id: true, name: true, unit: true } })).map((p) => [p.id, p]));
+    res.json({
+      batches: rows.map((b) => ({ ...batchDto(b, today), branchId: b.branchId, productName: products.get(b.productId)?.name ?? "", unit: products.get(b.productId)?.unit ?? "" })),
     });
   });
 

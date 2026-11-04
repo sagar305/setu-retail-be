@@ -5,6 +5,7 @@ import type { Account } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
 import { CounterBody, CounterPatchBody, PaymentMethodBody, SettingsPatchBody } from "../schemas2.js";
 import { audit } from "../services/audit.js";
+import { startBatchTracking } from "../services/batches.js";
 import { branchFor } from "./access.js";
 
 export const settingsDto = (a: Account) => ({
@@ -14,6 +15,7 @@ export const settingsDto = (a: Account) => ({
   cashierMaxDiscountBp: a.cashierMaxDiscountBp,
   receiptFooter: a.receiptFooter,
   receiptPaperSize: a.receiptPaperSize as "80mm" | "58mm" | "a4",
+  batchTracking: a.batchTracking,
 });
 
 export const DEFAULT_PAYMENT_METHODS = [
@@ -34,7 +36,12 @@ export function settingsRouter(ctx: Ctx): Router {
   router.patch("/settings", requireRole("OWNER"), async (req, res) => {
     const a = auth(req);
     const body = SettingsPatchBody.parse(req.body);
-    const account = await ctx.prisma.account.update({ where: { id: a.account.id }, data: body });
+    const account = await ctx.prisma.$transaction(async (tx) => {
+      const updated = await tx.account.update({ where: { id: a.account.id }, data: body });
+      // Turning batches on: current stock becomes an opening batch per product.
+      if (body.batchTracking && !a.account.batchTracking) await startBatchTracking(tx, a.account.id, ctx.now());
+      return updated;
+    });
     await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "settings.updated", entityType: "account", entityId: a.account.id, data: body });
     res.json(settingsDto(account));
   });

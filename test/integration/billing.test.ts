@@ -233,3 +233,61 @@ describe.skipIf(!TEST_DB)("billing (Postgres)", () => {
     expect(theirs.status).toBe(400);
   });
 });
+
+describe.skipIf(!TEST_DB)("batches (Postgres)", () => {
+  it("FEFO sale, cashier's pick, restore on cancel and return, opening batch when turned on", async () => {
+    await resetDb();
+    const h = harness();
+    const owner = await signUpOwner(h);
+    let o = await signIn(h, owner.username);
+    const branchId = o.me.branches[0].id;
+    const counterId = (await o.as("post", "/counters").send({ branchId })).body.counter.id;
+    const cash = ((await o.as("get", "/payment-methods")).body.methods as { id: string; kind: string }[]).find((m) => m.kind === "CASH")!.id;
+    const syrup = (await o.as("post", "/products").send({ name: "Cough syrup", price: 9000, costPrice: 6000, openingStock: [{ branchId, qtyMilli: 2000 }] })).body.product.id;
+
+    expect((await o.as("post", `/products/${syrup}/batches`).send({ branchId, batchNo: "X", qtyMilli: 1000 })).body.error.code).toBe("batches_off");
+    await o.as("patch", "/settings").send({ batchTracking: true });
+    o = await signIn(h, owner.username);
+    const opening = (await o.as("get", `/products/${syrup}/batches?branchId=${branchId}`)).body.batches;
+    expect(opening).toEqual([expect.objectContaining({ opening: true, qtyMilli: 2000, expiry: null })]);
+
+    const late = (await o.as("post", `/products/${syrup}/batches`).send({ branchId, batchNo: "L-27", expiry: "2027-06-30", costPrice: 6500, qtyMilli: 5000 })).body.batch;
+    const early = (await o.as("post", `/products/${syrup}/batches`).send({ branchId, batchNo: "E-26", expiry: "2026-11-20", costPrice: 5500, qtyMilli: 3000 })).body.batch;
+    expect(early.status).toBe("soon");
+    const list = (await o.as("get", `/products?branchId=${branchId}`)).body.products[0];
+    expect(list).toMatchObject({ stockMilli: 10_000, nextExpiry: "2026-11-20" });
+
+    const sell = (lines: unknown[], amount: number) => o.as("post", "/orders").send({ id: randomUUID(), branchId, counterId, lines, payments: [{ methodId: cash, amount }] });
+    const fefo = await sell([{ productId: syrup, qtyMilli: 4000 }], 36000);
+    expect(fefo.status, JSON.stringify(fefo.body)).toBe(201);
+    expect(fefo.body.order.items[0].batches).toEqual([
+      { batchNo: "E-26", expiry: "2026-11-20", qtyMilli: 3000 },
+      { batchNo: "L-27", expiry: "2027-06-30", qtyMilli: 1000 },
+    ]);
+    const item = await db().orderItem.findFirstOrThrow({ where: { orderId: fefo.body.order.id } });
+    expect(item.unitCost).toBe(Math.round((3 * 5500 + 1 * 6500) / 4));
+
+    const picked = await sell([{ productId: syrup, qtyMilli: 1000, batchId: late.id }], 9000);
+    expect(picked.body.order.items[0].batches).toEqual([{ batchNo: "L-27", expiry: "2027-06-30", qtyMilli: 1000 }]);
+
+    const qtyOf = async (id: string) => (await db().batch.findUniqueOrThrow({ where: { id } })).qtyMilli;
+    expect([await qtyOf(early.id), await qtyOf(late.id)]).toEqual([0, 3000]);
+
+    await o.as("post", `/orders/${fefo.body.order.id}/returns`).send({ counterId, items: [{ orderItemId: item.id, qtyMilli: 1000 }], refundMethodId: cash, reason: "x" });
+    expect(await qtyOf(early.id)).toBe(1000);
+    await o.as("post", `/orders/${picked.body.order.id}/cancel`).send({ reason: "x" });
+    expect(await qtyOf(late.id)).toBe(4000);
+
+    // Batches always add up to the stock number.
+    const bp = await db().branchProduct.findUniqueOrThrow({ where: { branchId_productId: { branchId, productId: syrup } } });
+    const sum = (await db().batch.findMany({ where: { productId: syrup } })).reduce((s, b) => s + b.qtyMilli, 0);
+    expect(sum).toBe(bp.stockMilli);
+
+    await o.as("post", `/products/${syrup}/stock`).send({ branchId, type: "SET", qtyMilli: 2000 });
+    const sum2 = (await db().batch.findMany({ where: { productId: syrup } })).reduce((s, b) => s + b.qtyMilli, 0);
+    expect(sum2).toBe(2000);
+
+    const expiring = await o.as("get", `/batches/expiring?branchId=${branchId}&days=90`);
+    expect(expiring.body.batches.every((b: { productName: string }) => b.productName === "Cough syrup")).toBe(true);
+  });
+});

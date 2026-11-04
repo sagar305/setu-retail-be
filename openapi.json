@@ -882,6 +882,9 @@
               "58mm",
               "a4"
             ]
+          },
+          "batchTracking": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -890,7 +893,8 @@
           "allowNegativeStock",
           "cashierMaxDiscountBp",
           "receiptFooter",
-          "receiptPaperSize"
+          "receiptPaperSize",
+          "batchTracking"
         ]
       },
       "PaymentMethod": {
@@ -1053,6 +1057,12 @@
           },
           "archived": {
             "type": "boolean"
+          },
+          "nextExpiry": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -1373,6 +1383,31 @@
                 },
                 "returnedQtyMilli": {
                   "type": "integer"
+                },
+                "batches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "batchNo": {
+                        "type": "string"
+                      },
+                      "expiry": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "qtyMilli": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "batchNo",
+                      "expiry",
+                      "qtyMilli"
+                    ]
+                  }
                 }
               },
               "required": [
@@ -1392,7 +1427,8 @@
                 "sgst",
                 "igst",
                 "total",
-                "returnedQtyMilli"
+                "returnedQtyMilli",
+                "batches"
               ]
             }
           },
@@ -1716,6 +1752,13 @@
                   "type": "integer",
                   "minimum": 1,
                   "maximum": 100000000
+                },
+                "batchId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid"
                 }
               },
               "required": [
@@ -1868,6 +1911,1176 @@
         "required": [
           "name",
           "price"
+        ]
+      },
+      "Batch": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "productId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "batchNo": {
+            "type": "string"
+          },
+          "expiry": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costPrice": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "qtyMilli": {
+            "type": "integer"
+          },
+          "opening": {
+            "type": "boolean"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "expired",
+              "soon",
+              "ok",
+              "none"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "productId",
+          "batchNo",
+          "expiry",
+          "costPrice",
+          "qtyMilli",
+          "opening",
+          "receivedAt",
+          "status"
+        ]
+      },
+      "ProductImportRow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "category": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "sku": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "barcode": {
+            "type": "string",
+            "maxLength": 60
+          },
+          "hsn": {
+            "type": "string",
+            "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+          },
+          "gstRateBp": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "taxInclusive": {
+            "type": "boolean"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "price": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "costPrice": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "trackStock": {
+            "type": "boolean"
+          },
+          "lowStockMilli": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "stockMilli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "price"
+        ]
+      },
+      "CustomerImportRow": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "phone": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "gstin": {
+            "type": "string",
+            "maxLength": 15
+          },
+          "stateCode": {
+            "type": "string",
+            "maxLength": 2
+          },
+          "address": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "ImportResult": {
+        "type": "object",
+        "properties": {
+          "created": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "row": {
+                  "type": "integer"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "row",
+                "message"
+              ]
+            }
+          }
+        },
+        "required": [
+          "created",
+          "updated",
+          "errors"
+        ]
+      },
+      "SalesReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "bills": {
+            "type": "integer"
+          },
+          "gross": {
+            "type": "integer"
+          },
+          "discounts": {
+            "type": "integer"
+          },
+          "sales": {
+            "type": "integer"
+          },
+          "returns": {
+            "type": "integer"
+          },
+          "returnCount": {
+            "type": "integer"
+          },
+          "net": {
+            "type": "integer"
+          },
+          "averageBill": {
+            "type": "integer"
+          },
+          "cancelled": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "count",
+              "total"
+            ]
+          },
+          "byPayment": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "method",
+                "kind",
+                "amount"
+              ]
+            }
+          },
+          "refundsByMethod": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "method": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "method",
+                "amount"
+              ]
+            }
+          },
+          "topProducts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "unit",
+                "qtyMilli",
+                "amount"
+              ]
+            }
+          },
+          "byBranch": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "branchId": {
+                  "type": "string"
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "branchId",
+                "bills",
+                "sales"
+              ]
+            }
+          },
+          "byDay": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string"
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "day",
+                "bills",
+                "sales"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "bills",
+          "gross",
+          "discounts",
+          "sales",
+          "returns",
+          "returnCount",
+          "net",
+          "averageBill",
+          "cancelled",
+          "byPayment",
+          "refundsByMethod",
+          "topProducts",
+          "byBranch",
+          "byDay"
+        ]
+      },
+      "GstReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "byRate": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "number"
+              }
+            }
+          },
+          "byHsn": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hsn": {
+                  "type": "string"
+                },
+                "rateBp": {
+                  "type": "integer"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "cgst": {
+                  "type": "integer"
+                },
+                "sgst": {
+                  "type": "integer"
+                },
+                "igst": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "hsn",
+                "rateBp",
+                "unit",
+                "qtyMilli",
+                "taxable",
+                "cgst",
+                "sgst",
+                "igst",
+                "total"
+              ]
+            }
+          },
+          "b2b": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "invoiceNumber": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "customerName": {
+                  "type": "string"
+                },
+                "customerGstin": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "placeOfSupply": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "interState": {
+                  "type": "boolean"
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "cgst": {
+                  "type": "integer"
+                },
+                "sgst": {
+                  "type": "integer"
+                },
+                "igst": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "invoiceNumber",
+                "date",
+                "customerName",
+                "customerGstin",
+                "placeOfSupply",
+                "interState",
+                "taxable",
+                "cgst",
+                "sgst",
+                "igst",
+                "total"
+              ]
+            }
+          },
+          "b2c": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "interState": {
+                  "type": "boolean"
+                },
+                "placeOfSupply": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "cgst": {
+                  "type": "integer"
+                },
+                "sgst": {
+                  "type": "integer"
+                },
+                "igst": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "interState",
+                "placeOfSupply",
+                "bills",
+                "taxable",
+                "cgst",
+                "sgst",
+                "igst",
+                "total"
+              ]
+            }
+          },
+          "creditNotes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "number": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "invoiceNumber": {
+                  "type": "string"
+                },
+                "customerName": {
+                  "type": "string"
+                },
+                "customerGstin": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "cgst": {
+                  "type": "integer"
+                },
+                "sgst": {
+                  "type": "integer"
+                },
+                "igst": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "number",
+                "date",
+                "invoiceNumber",
+                "customerName",
+                "customerGstin",
+                "taxable",
+                "cgst",
+                "sgst",
+                "igst",
+                "total"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "byRate",
+          "byHsn",
+          "b2b",
+          "b2c",
+          "creditNotes"
+        ]
+      },
+      "StockReport": {
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer"
+          },
+          "missingCost": {
+            "type": "integer"
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "tracked": {
+                "type": "integer"
+              },
+              "low": {
+                "type": "integer"
+              },
+              "out": {
+                "type": "integer"
+              },
+              "negative": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "tracked",
+              "low",
+              "out",
+              "negative"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "stockMilli": {
+                  "type": "integer"
+                },
+                "costPrice": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "value": {
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "ok",
+                    "low",
+                    "out",
+                    "negative"
+                  ]
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "unit",
+                "stockMilli",
+                "costPrice",
+                "value",
+                "status"
+              ]
+            }
+          },
+          "batchTracking": {
+            "type": "boolean"
+          },
+          "expiring": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "batchId": {
+                  "type": "string"
+                },
+                "productName": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "batchNo": {
+                  "type": "string"
+                },
+                "expiry": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "bucket": {
+                  "type": "string",
+                  "enum": [
+                    "30",
+                    "60",
+                    "90",
+                    "expired"
+                  ]
+                }
+              },
+              "required": [
+                "batchId",
+                "productName",
+                "unit",
+                "batchNo",
+                "expiry",
+                "qtyMilli",
+                "value",
+                "bucket"
+              ]
+            }
+          }
+        },
+        "required": [
+          "branchId",
+          "value",
+          "missingCost",
+          "counts",
+          "items",
+          "batchTracking",
+          "expiring"
+        ]
+      },
+      "StaffReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "byCashier": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "userId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "OWNER",
+                    "MANAGER",
+                    "CASHIER",
+                    null
+                  ]
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                },
+                "discounts": {
+                  "type": "integer"
+                },
+                "returns": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "userId",
+                "name",
+                "role",
+                "bills",
+                "sales",
+                "discounts",
+                "returns"
+              ]
+            }
+          },
+          "byCounter": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "counterId": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "counterId",
+                "code",
+                "name",
+                "bills",
+                "sales"
+              ]
+            }
+          },
+          "margin": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "revenue": {
+                  "type": "integer"
+                },
+                "cost": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "margin": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "marginBp": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "unit",
+                "qtyMilli",
+                "revenue",
+                "cost",
+                "margin",
+                "marginBp"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "byCashier",
+          "byCounter",
+          "margin"
+        ]
+      },
+      "StockLog": {
+        "type": "object",
+        "properties": {
+          "log": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "productName": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "changeMilli": {
+                  "type": "integer"
+                },
+                "stockAfterMilli": {
+                  "type": "integer"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "userName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "createdAt",
+                "productName",
+                "unit",
+                "type",
+                "changeMilli",
+                "stockAfterMilli",
+                "note",
+                "userName"
+              ]
+            }
+          }
+        },
+        "required": [
+          "log"
+        ]
+      },
+      "Dashboard": {
+        "type": "object",
+        "properties": {
+          "today": {
+            "type": "object",
+            "properties": {
+              "sales": {
+                "type": "integer"
+              },
+              "net": {
+                "type": "integer"
+              },
+              "bills": {
+                "type": "integer"
+              },
+              "averageBill": {
+                "type": "integer"
+              },
+              "returns": {
+                "type": "integer"
+              },
+              "creditGiven": {
+                "type": "integer"
+              },
+              "byPayment": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "method": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "type": "string"
+                    },
+                    "amount": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "method",
+                    "kind",
+                    "amount"
+                  ]
+                }
+              },
+              "byBranch": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "branchId": {
+                      "type": "string"
+                    },
+                    "bills": {
+                      "type": "integer"
+                    },
+                    "sales": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "branchId",
+                    "bills",
+                    "sales"
+                  ]
+                }
+              },
+              "topProducts": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "productId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "unit": {
+                      "type": "string"
+                    },
+                    "qtyMilli": {
+                      "type": "integer"
+                    },
+                    "amount": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "productId",
+                    "name",
+                    "unit",
+                    "qtyMilli",
+                    "amount"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "sales",
+              "net",
+              "bills",
+              "averageBill",
+              "returns",
+              "creditGiven",
+              "byPayment",
+              "byBranch",
+              "topProducts"
+            ]
+          },
+          "yesterday": {
+            "type": "object",
+            "properties": {
+              "sales": {
+                "type": "integer"
+              },
+              "bills": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "sales",
+              "bills"
+            ]
+          },
+          "week": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string"
+                },
+                "sales": {
+                  "type": "integer"
+                },
+                "bills": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "day",
+                "sales",
+                "bills"
+              ]
+            }
+          },
+          "lowStock": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "branchId": {
+                  "type": "string"
+                },
+                "stockMilli": {
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "out",
+                    "negative"
+                  ]
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "unit",
+                "branchId",
+                "stockMilli",
+                "status"
+              ]
+            }
+          },
+          "expiringSoon": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "today",
+          "yesterday",
+          "week",
+          "lowStock",
+          "expiringSoon"
         ]
       }
     },
@@ -3791,6 +5004,9 @@
                       "58mm",
                       "a4"
                     ]
+                  },
+                  "batchTracking": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -5593,6 +6809,13 @@
                           "type": "integer",
                           "minimum": 1,
                           "maximum": 100000000
+                        },
+                        "batchId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uuid"
                         }
                       },
                       "required": [
@@ -6192,6 +7415,849 @@
         "responses": {
           "204": {
             "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/{id}/batches": {
+      "get": {
+        "summary": "Batches in stock for a product in a branch, earliest expiry first",
+        "tags": [
+          "batches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batches": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Batch"
+                      }
+                    }
+                  },
+                  "required": [
+                    "batches"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Receive stock as a batch (batch no., expiry, cost)",
+        "tags": [
+          "batches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "batchNo": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "expiry": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "costPrice": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  },
+                  "qtyMilli": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "branchId",
+                  "qtyMilli"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batch": {
+                      "$ref": "#/components/schemas/Batch"
+                    }
+                  },
+                  "required": [
+                    "batch"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batches/{id}": {
+      "patch": {
+        "summary": "Correct a batch's number, expiry or cost",
+        "tags": [
+          "batches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "batchNo": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "expiry": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "costPrice": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batch": {
+                      "$ref": "#/components/schemas/Batch"
+                    }
+                  },
+                  "required": [
+                    "batch"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/batches/expiring": {
+      "get": {
+        "summary": "Batches expiring within ?days= (default 90)",
+        "tags": [
+          "batches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batches": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Batch"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "branchId": {
+                                "type": "string"
+                              },
+                              "productName": {
+                                "type": "string"
+                              },
+                              "unit": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "branchId",
+                              "productName",
+                              "unit"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "batches"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/dashboard": {
+      "get": {
+        "summary": "Today, yesterday, last 7 days, low stock, expiring soon (?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dashboard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/sales": {
+      "get": {
+        "summary": "Sales summary (?from=&to= ISO instants, ?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalesReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/gst": {
+      "get": {
+        "summary": "GST by rate (returns netted), by HSN, B2B/B2C, credit notes (?from=&to= ISO instants, ?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GstReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/stock": {
+      "get": {
+        "summary": "Stock value, low/out/below zero, expiring batches (?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/staff": {
+      "get": {
+        "summary": "Sales by cashier and counter; margin by product (?from=&to= ISO instants, ?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StaffReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/stock-log": {
+      "get": {
+        "summary": "Stock movements in a branch (?from=&to= ISO instants, ?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockLog"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/imports/products": {
+      "post": {
+        "summary": "Import products (CSV rows); matches SKU, barcode, then name",
+        "tags": [
+          "imports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "rows": {
+                    "type": "array",
+                    "items": {},
+                    "minItems": 1,
+                    "maxItems": 5000
+                  }
+                },
+                "required": [
+                  "branchId",
+                  "rows"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/imports/customers": {
+      "post": {
+        "summary": "Import customers (CSV rows); matches mobile, then name",
+        "tags": [
+          "imports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rows": {
+                    "type": "array",
+                    "items": {},
+                    "minItems": 1,
+                    "maxItems": 5000
+                  }
+                },
+                "required": [
+                  "rows"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/imports/free-pos": {
+      "post": {
+        "summary": "Import a free Browser POS backup (POS_BACKUP.json) into a branch (owner)",
+        "tags": [
+          "imports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "backup": {
+                    "type": "object",
+                    "properties": {
+                      "app": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "number"
+                      },
+                      "data": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "array",
+                          "items": {}
+                        }
+                      }
+                    },
+                    "required": [
+                      "app",
+                      "version",
+                      "data"
+                    ]
+                  }
+                },
+                "required": [
+                  "branchId",
+                  "backup"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "products": {
+                      "$ref": "#/components/schemas/ImportResult"
+                    },
+                    "customers": {
+                      "$ref": "#/components/schemas/ImportResult"
+                    },
+                    "categories": {
+                      "type": "integer"
+                    },
+                    "paymentMethodsAdded": {
+                      "type": "integer"
+                    },
+                    "batches": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "object",
+                      "properties": {
+                        "orders": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "orders"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "products",
+                    "customers",
+                    "categories",
+                    "paymentMethodsAdded",
+                    "batches",
+                    "skipped"
+                  ]
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid request",

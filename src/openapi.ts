@@ -3,6 +3,7 @@ import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-ope
 import { z, type ZodType } from "zod";
 import * as S from "./schemas.js";
 import * as P from "./schemas2.js";
+import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
 // Every route registers its request/response schemas here, so the frontend can
@@ -147,6 +148,70 @@ route("post", "/orders/{id}/returns", "Return items: issues a GST credit note (o
 route("get", "/held-carts", "Held bills in a branch (?branchId=)", { tag: "orders", ok: z.object({ carts: z.array(HeldCart) }) });
 route("post", "/held-carts", "Hold a bill", { tag: "orders", body: P.HeldCartBody, ok: z.object({ cart: HeldCart }), status: 201 });
 route("delete", "/held-carts/{id}", "Remove a held bill", { tag: "orders", ok: null, status: 204 });
+
+// ── Phase 2b: batches, reports, imports ──
+const Batch = registry.register("Batch", P.BatchDto);
+registry.register("ProductImportRow", ProductRow);
+registry.register("CustomerImportRow", CustomerRow);
+const ImportResult = registry.register("ImportResult", z.object({ created: z.number().int(), updated: z.number().int(), errors: z.array(z.object({ row: z.number().int(), message: z.string() })) }));
+const Money = z.number().int();
+const Range = "(?from=&to= ISO instants, ?branchId=)";
+
+route("get", "/products/{id}/batches", "Batches in stock for a product in a branch, earliest expiry first", { tag: "batches", ok: z.object({ batches: z.array(Batch) }) });
+route("post", "/products/{id}/batches", "Receive stock as a batch (batch no., expiry, cost)", { tag: "batches", body: P.BatchBody, ok: z.object({ batch: Batch }), status: 201 });
+route("patch", "/batches/{id}", "Correct a batch's number, expiry or cost", { tag: "batches", body: P.BatchPatchBody, ok: z.object({ batch: Batch }) });
+route("get", "/batches/expiring", "Batches expiring within ?days= (default 90)", { tag: "batches", ok: z.object({ batches: z.array(Batch.extend({ branchId: z.string(), productName: z.string(), unit: z.string() })) }) });
+
+const SalesReport = registry.register("SalesReport", z.object({
+  from: z.string(), to: z.string(), bills: z.number().int(), gross: Money, discounts: Money, sales: Money, returns: Money, returnCount: z.number().int(), net: Money, averageBill: Money,
+  cancelled: z.object({ count: z.number().int(), total: Money }),
+  byPayment: z.array(z.object({ method: z.string(), kind: z.string(), amount: Money })),
+  refundsByMethod: z.array(z.object({ method: z.string(), amount: Money })),
+  topProducts: z.array(z.object({ productId: z.string().nullable(), name: z.string(), unit: z.string(), qtyMilli: z.number().int(), amount: Money })),
+  byBranch: z.array(z.object({ branchId: z.string(), bills: z.number().int(), sales: Money })),
+  byDay: z.array(z.object({ day: z.string(), bills: z.number().int(), sales: Money })),
+}));
+const Tax = { taxable: Money, cgst: Money, sgst: Money, igst: Money, total: Money };
+const GstReport = registry.register("GstReport", z.object({
+  from: z.string(), to: z.string(),
+  byRate: z.array(z.record(z.string(), z.number())),
+  byHsn: z.array(z.object({ hsn: z.string(), rateBp: z.number().int(), unit: z.string(), qtyMilli: z.number().int(), ...Tax })),
+  b2b: z.array(z.object({ invoiceNumber: z.string(), date: z.string(), customerName: z.string(), customerGstin: z.string().nullable(), placeOfSupply: z.string().nullable(), interState: z.boolean(), ...Tax })),
+  b2c: z.array(z.object({ interState: z.boolean(), placeOfSupply: z.string().nullable(), bills: z.number().int(), ...Tax })),
+  creditNotes: z.array(z.object({ number: z.string(), date: z.string(), invoiceNumber: z.string(), customerName: z.string(), customerGstin: z.string().nullable(), ...Tax })),
+}));
+const StockReport = registry.register("StockReport", z.object({
+  branchId: z.string(), value: Money, missingCost: z.number().int(),
+  counts: z.object({ tracked: z.number().int(), low: z.number().int(), out: z.number().int(), negative: z.number().int() }),
+  items: z.array(z.object({ productId: z.string(), name: z.string(), unit: z.string(), stockMilli: z.number().int(), costPrice: Money.nullable(), value: Money, status: z.enum(["ok", "low", "out", "negative"]) })),
+  batchTracking: z.boolean(),
+  expiring: z.array(z.object({ batchId: z.string(), productName: z.string(), unit: z.string(), batchNo: z.string(), expiry: z.string().nullable(), qtyMilli: z.number().int(), value: Money.nullable(), bucket: z.enum(["expired", "30", "60", "90"]) })),
+}));
+const StaffReport = registry.register("StaffReport", z.object({
+  from: z.string(), to: z.string(),
+  byCashier: z.array(z.object({ userId: z.string(), name: z.string(), role: S.RoleEnum.nullable(), bills: z.number().int(), sales: Money, discounts: Money, returns: Money })),
+  byCounter: z.array(z.object({ counterId: z.string(), code: z.string(), name: z.string(), bills: z.number().int(), sales: Money })),
+  margin: z.array(z.object({ productId: z.string().nullable(), name: z.string(), unit: z.string(), qtyMilli: z.number().int(), revenue: Money, cost: Money.nullable(), margin: Money.nullable(), marginBp: z.number().int().nullable() })),
+}));
+const StockLog = registry.register("StockLog", z.object({ log: z.array(z.object({ id: z.string(), createdAt: z.string(), productName: z.string(), unit: z.string(), type: z.string(), changeMilli: z.number().int(), stockAfterMilli: z.number().int(), note: z.string(), userName: z.string() })) }));
+const Dashboard = registry.register("Dashboard", z.object({
+  today: z.object({ sales: Money, net: Money, bills: z.number().int(), averageBill: Money, returns: Money, creditGiven: Money, byPayment: SalesReport.shape.byPayment, byBranch: SalesReport.shape.byBranch, topProducts: SalesReport.shape.topProducts }),
+  yesterday: z.object({ sales: Money, bills: z.number().int() }),
+  week: z.array(z.object({ day: z.string(), sales: Money, bills: z.number().int() })),
+  lowStock: z.array(z.object({ productId: z.string(), name: z.string(), unit: z.string(), branchId: z.string(), stockMilli: z.number().int(), status: z.enum(["low", "out", "negative"]) })),
+  expiringSoon: z.number().int(),
+}));
+
+route("get", "/reports/dashboard", "Today, yesterday, last 7 days, low stock, expiring soon (?branchId=)", { tag: "reports", ok: Dashboard });
+route("get", "/reports/sales", `Sales summary ${Range}`, { tag: "reports", ok: SalesReport });
+route("get", "/reports/gst", `GST by rate (returns netted), by HSN, B2B/B2C, credit notes ${Range}`, { tag: "reports", ok: GstReport });
+route("get", "/reports/stock", "Stock value, low/out/below zero, expiring batches (?branchId=)", { tag: "reports", ok: StockReport });
+route("get", "/reports/staff", `Sales by cashier and counter; margin by product ${Range}`, { tag: "reports", ok: StaffReport });
+route("get", "/reports/stock-log", `Stock movements in a branch ${Range}`, { tag: "reports", ok: StockLog });
+
+route("post", "/imports/products", "Import products (CSV rows); matches SKU, barcode, then name", { tag: "imports", body: ProductImportBody, ok: ImportResult });
+route("post", "/imports/customers", "Import customers (CSV rows); matches mobile, then name", { tag: "imports", body: CustomerImportBody, ok: ImportResult });
+route("post", "/imports/free-pos", "Import a free Browser POS backup (POS_BACKUP.json) into a branch (owner)", { tag: "imports", body: FreePosImportBody, ok: z.object({ products: ImportResult, customers: ImportResult, categories: z.number().int(), paymentMethodsAdded: z.number().int(), batches: z.number().int(), skipped: z.object({ orders: z.number().int() }) }) });
 
 export function buildOpenApiDocument(version: string) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({

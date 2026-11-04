@@ -128,6 +128,8 @@ model Account {
   receiptFooter        String   @default("Thank you for shopping with us!")
   /// "80mm" | "58mm" | "a4"
   receiptPaperSize     String   @default("80mm")
+  /// Batch & expiry tracking (pharmacy/FMCG). Off by default.
+  batchTracking        Boolean  @default(false)
   createdAt            DateTime @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 
@@ -542,7 +544,8 @@ model OrderItem {
   unitCost         Int?
   returnedQtyMilli Int     @default(0)
 
-  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order   Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  batches OrderItemBatch[]
 
   @@index([orderId])
   @@map("order_items")
@@ -621,4 +624,53 @@ model HeldCart {
 
   @@index([branchId, createdAt])
   @@map("held_carts")
+}
+
+// ─── Batches & expiry (when Account.batchTracking is on) ────────────────────
+// BranchProduct.stockMilli stays the one stock number; batches say WHICH units
+// those are. Sales take the batch that expires first (FEFO) unless the cashier
+// picks one.
+
+model Batch {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  branchId   String    @db.Uuid
+  productId  String    @db.Uuid
+  /// Supplier's batch / lot number; "" when unknown.
+  batchNo    String    @default("")
+  /// Expiry day; null = no expiry.
+  expiry     DateTime? @db.Date
+  /// Cost per unit (paise) for this batch; null = the product's cost.
+  costPrice  Int?
+  qtyMilli   Int
+  /// Catch-all batch for stock that came in without batch details.
+  opening    Boolean   @default(false)
+  note       String    @default("")
+  receivedAt DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  allocations OrderItemBatch[]
+
+  @@index([branchId, productId, expiry])
+  @@index([accountId, expiry])
+  @@map("batches")
+}
+
+/// Which batches the units of a bill line came from, and what they cost.
+model OrderItemBatch {
+  id            String @id @default(uuid()) @db.Uuid
+  orderItemId   String @db.Uuid
+  batchId       String @db.Uuid
+  qtyMilli      Int
+  /// Units of this allocation already put back (cancel / return).
+  restoredMilli Int    @default(0)
+  unitCost      Int?
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  batch     Batch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+  @@index([batchId])
+  @@map("order_item_batches")
 }

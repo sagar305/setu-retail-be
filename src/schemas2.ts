@@ -13,6 +13,7 @@ export const SettingsPatchBody = z.object({
   cashierMaxDiscountBp: z.number().int().min(0).max(10_000).optional(),
   receiptFooter: Text(300).optional(),
   receiptPaperSize: z.enum(["80mm", "58mm", "a4"]).optional(),
+  batchTracking: z.boolean().optional(),
 });
 
 export const PaymentMethodBody = z.object({
@@ -52,6 +53,17 @@ export const StockAdjustBody = z.object({
   note: Text(200).optional(),
 });
 
+const Day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use yyyy-mm-dd.");
+export const BatchBody = z.object({
+  branchId: z.uuid(),
+  batchNo: Text(60).optional(),
+  expiry: Day.nullable().optional(),
+  costPrice: Paise.nullable().optional(),
+  qtyMilli: Milli.min(1),
+  note: Text(200).optional(),
+});
+export const BatchPatchBody = z.object({ batchNo: Text(60).optional(), expiry: Day.nullable().optional(), costPrice: Paise.nullable().optional() });
+
 export const CustomerBody = z.object({
   name: Name,
   phone: Text(20).optional(),
@@ -71,7 +83,7 @@ export const OrderBody = z.object({
   branchId: z.uuid(),
   counterId: z.uuid(),
   customerId: z.uuid().nullable().optional(),
-  lines: z.array(z.object({ productId: z.uuid(), qtyMilli: Milli.min(1).max(100_000_000) })).min(1, "Add at least one item.").max(500),
+  lines: z.array(z.object({ productId: z.uuid(), qtyMilli: Milli.min(1).max(100_000_000), batchId: z.uuid().nullable().optional() })).min(1, "Add at least one item.").max(500),
   discount: DiscountBody.optional(),
   payments: z.array(z.object({ methodId: z.uuid(), amount: Paise })).min(1).max(5),
   note: Text(300).optional(),
@@ -105,6 +117,7 @@ export const SettingsDto = z.object({
   cashierMaxDiscountBp: z.number().int(),
   receiptFooter: z.string(),
   receiptPaperSize: z.enum(["80mm", "58mm", "a4"]),
+  batchTracking: z.boolean(),
 });
 export const PaymentMethodDto = z.object({ id: z.uuid(), name: z.string(), kind: Kind, active: z.boolean(), sort: z.number().int() });
 export const CounterDto = z.object({ id: z.uuid(), branchId: z.uuid(), code: z.string(), name: z.string(), lastSeenAt: Iso.nullable() });
@@ -128,6 +141,19 @@ export const ProductDto = z.object({
   lowStockMilli: z.number().int().nullable(),
   stockStatus: z.enum(["untracked", "out", "low", "ok"]),
   archived: z.boolean(),
+  /** Earliest expiry among this branch's batches in stock (batch tracking on). */
+  nextExpiry: z.string().nullable().optional(),
+});
+export const BatchDto = z.object({
+  id: z.uuid(),
+  productId: z.uuid(),
+  batchNo: z.string(),
+  expiry: z.string().nullable(),
+  costPrice: z.number().int().nullable(),
+  qtyMilli: z.number().int(),
+  opening: z.boolean(),
+  receivedAt: Iso,
+  status: z.enum(["expired", "soon", "ok", "none"]),
 });
 export const CustomerDto = z.object({
   id: z.uuid(),
@@ -181,6 +207,7 @@ export const OrderDto = z.object({
       discount: z.number().int(),
       ...Amounts,
       returnedQtyMilli: z.number().int(),
+      batches: z.array(z.object({ batchNo: z.string(), expiry: z.string().nullable(), qtyMilli: z.number().int() })),
     }),
   ),
   payments: z.array(z.object({ methodId: z.uuid().nullable(), methodName: z.string(), kind: Kind, amount: z.number().int() })),
