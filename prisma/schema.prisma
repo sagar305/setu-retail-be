@@ -130,6 +130,8 @@ model Account {
   receiptPaperSize     String   @default("80mm")
   /// Batch & expiry tracking (pharmacy/FMCG). Off by default.
   batchTracking        Boolean  @default(false)
+  /// Connected tools the owner switched off (slugs); everything else is on.
+  disabledTools        String[] @default([])
   createdAt            DateTime @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 
@@ -143,6 +145,7 @@ model Account {
   customers      Customer[]
   paymentMethods PaymentMethod[]
   orders         Order[]
+  suppliers      Supplier[]
 
   @@map("accounts")
 }
@@ -377,6 +380,14 @@ enum InventoryChange {
   SALE
   CANCEL
   RETURN
+  /// Supplier bill in the Purchase Register.
+  PURCHASE
+  /// Goods sent back to the supplier.
+  PURCHASE_RETURN
+  /// A replacement for returned goods arrived.
+  REPLACEMENT
+  /// A supplier bill was cancelled.
+  PURCHASE_CANCEL
 }
 
 model InventoryLog {
@@ -685,4 +696,289 @@ model OrderItemBatch {
   @@index([orderItemId])
   @@index([batchId])
   @@map("order_item_batches")
+}
+
+// ─────────────────────────── Phase 4a: money tools ───────────────────────────
+// Credit sales, cash takings and supplier bills are read live from orders,
+// credit notes and purchases; these tables hold only what those don't.
+
+model Supplier {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  name       String
+  phone      String    @default("")
+  email      String    @default("")
+  gstin      String?
+  /// GST state code; decides CGST/SGST or IGST on their bills.
+  stateCode  String?
+  address    String    @default("")
+  notes      String    @default("")
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  account   Account    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([accountId, name])
+  @@map("suppliers")
+}
+
+model Expense {
+  /// Client-generated (offline-created expenses keep their id).
+  id           String      @id @db.Uuid
+  accountId    String      @db.Uuid
+  branchId     String      @db.Uuid
+  /// When the money went out.
+  spentAt      DateTime    @db.Timestamptz(3)
+  category     String
+  description  String      @default("")
+  amount       Int
+  methodId     String?     @db.Uuid
+  methodName   String
+  kind         PaymentKind
+  supplierId   String?     @db.Uuid
+  userId       String?     @db.Uuid
+  counterId    String?     @db.Uuid
+  offline      Boolean     @default(false)
+  /// "free-pos" when imported from a backup.
+  importedFrom String?
+  deletedAt    DateTime?   @db.Timestamptz(3)
+  createdAt    DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime    @updatedAt @db.Timestamptz(3)
+
+  @@index([accountId, branchId, spentAt])
+  @@map("expenses")
+}
+
+enum CustomerEntryType {
+  /// Udhaar from before Setu Retail, counted as the oldest bill.
+  OPENING
+  /// Udhaar given outside a bill (e.g. imported history).
+  CREDIT
+  /// Money received from the customer.
+  PAYMENT
+}
+
+model CustomerLedgerEntry {
+  id           String            @id @db.Uuid
+  accountId    String            @db.Uuid
+  customerId   String            @db.Uuid
+  /// Where a payment was received (its cash book).
+  branchId     String?           @db.Uuid
+  type         CustomerEntryType
+  amount       Int
+  occurredAt   DateTime          @db.Timestamptz(3)
+  methodId     String?           @db.Uuid
+  methodName   String            @default("")
+  kind         PaymentKind?
+  note         String            @default("")
+  userId       String?           @db.Uuid
+  counterId    String?           @db.Uuid
+  offline      Boolean           @default(false)
+  importedFrom String?
+  voidedAt     DateTime?         @db.Timestamptz(3)
+  voidedById   String?           @db.Uuid
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, customerId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@map("customer_ledger_entries")
+}
+
+enum CashEntryType {
+  IN
+  OUT
+}
+
+/// Manual cash book lines; everything else posts from sales, expenses and payments.
+model CashEntry {
+  id           String        @id @db.Uuid
+  accountId    String        @db.Uuid
+  branchId     String        @db.Uuid
+  type         CashEntryType
+  amount       Int
+  occurredAt   DateTime      @db.Timestamptz(3)
+  description  String
+  userId       String?       @db.Uuid
+  importedFrom String?
+  deletedAt    DateTime?     @db.Timestamptz(3)
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+
+  @@index([branchId, occurredAt])
+  @@map("cash_entries")
+}
+
+/// The first opening balance of a branch's cash book, set by the owner.
+model CashOpening {
+  branchId  String   @id @db.Uuid
+  accountId String   @db.Uuid
+  /// Opening balance at the start of this day (shop's time zone).
+  day       DateTime @db.Date
+  amount    Int
+  userId    String?  @db.Uuid
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("cash_openings")
+}
+
+model Purchase {
+  id             String       @id @db.Uuid
+  accountId      String       @db.Uuid
+  branchId       String       @db.Uuid
+  supplierId     String       @db.Uuid
+  billNumber     String
+  billDate       DateTime     @db.Date
+  /// When the unpaid part is due (Payables Aging); null = on the bill date.
+  dueDate        DateTime?    @db.Date
+  interState     Boolean      @default(false)
+  taxableTotal   Int
+  cgstTotal      Int
+  sgstTotal      Int
+  igstTotal      Int
+  total          Int
+  /// Paid when the bill was entered; the rest is owed to the supplier.
+  paidAmount     Int          @default(0)
+  paidMethodId   String?      @db.Uuid
+  paidMethodName String       @default("")
+  paidKind       PaymentKind?
+  notes          String       @default("")
+  /// False for imported history (stock came across separately).
+  stockApplied   Boolean      @default(true)
+  importedFrom   String?
+  userId         String?      @db.Uuid
+  cancelledAt    DateTime?    @db.Timestamptz(3)
+  cancelReason   String       @default("")
+  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
+
+  supplier Supplier         @relation(fields: [supplierId], references: [id])
+  items    PurchaseItem[]
+  returns  PurchaseReturn[]
+
+  @@index([accountId, supplierId, billDate])
+  @@index([accountId, branchId, billDate])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id               String    @id @default(uuid()) @db.Uuid
+  purchaseId       String    @db.Uuid
+  productId        String?   @db.Uuid
+  name             String
+  hsn              String    @default("")
+  unit             String    @default("pcs")
+  qtyMilli         Int
+  /// Cost per unit before GST, as on the supplier's bill.
+  unitCost         Int
+  gstRateBp        Int       @default(0)
+  taxable          Int
+  cgst             Int
+  sgst             Int
+  igst             Int
+  total            Int
+  batchId          String?   @db.Uuid
+  batchNo          String    @default("")
+  expiry           DateTime? @db.Date
+  returnedQtyMilli Int       @default(0)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@map("purchase_items")
+}
+
+enum PurchaseReturnMode {
+  /// Supplier gives credit: reduces what you owe.
+  CREDIT_NOTE
+  /// Supplier sends the same goods again.
+  REPLACEMENT
+}
+
+enum PurchaseReturnStatus {
+  SETTLED
+  PENDING
+  RECEIVED
+}
+
+model PurchaseReturn {
+  id           String               @id @db.Uuid
+  accountId    String               @db.Uuid
+  branchId     String               @db.Uuid
+  purchaseId   String               @db.Uuid
+  supplierId   String               @db.Uuid
+  mode         PurchaseReturnMode
+  status       PurchaseReturnStatus
+  taxableTotal Int
+  cgstTotal    Int
+  sgstTotal    Int
+  igstTotal    Int
+  total        Int
+  note         String               @default("")
+  occurredAt   DateTime             @db.Timestamptz(3)
+  receivedAt   DateTime?            @db.Timestamptz(3)
+  importedFrom String?
+  userId       String?              @db.Uuid
+  createdAt    DateTime             @default(now()) @db.Timestamptz(3)
+
+  purchase Purchase             @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  items    PurchaseReturnItem[]
+
+  @@index([accountId, supplierId, occurredAt])
+  @@map("purchase_returns")
+}
+
+model PurchaseReturnItem {
+  id             String  @id @default(uuid()) @db.Uuid
+  returnId       String  @db.Uuid
+  purchaseItemId String? @db.Uuid
+  productId      String? @db.Uuid
+  name           String
+  qtyMilli       Int
+  taxable        Int
+  cgst           Int
+  sgst           Int
+  igst           Int
+  total          Int
+
+  ret PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+
+  @@index([returnId])
+  @@map("purchase_return_items")
+}
+
+enum SupplierEntryType {
+  /// Dues from before Setu Retail, counted as the oldest bill.
+  OPENING
+  /// A bill kept only in the ledger (e.g. imported history).
+  BILL
+  /// Money paid to the supplier.
+  PAYMENT
+}
+
+model SupplierLedgerEntry {
+  id           String            @id @db.Uuid
+  accountId    String            @db.Uuid
+  supplierId   String            @db.Uuid
+  /// Where a payment was made from (its cash book).
+  branchId     String?           @db.Uuid
+  type         SupplierEntryType
+  amount       Int
+  occurredAt   DateTime          @db.Timestamptz(3)
+  dueDate      DateTime?         @db.Date
+  methodId     String?           @db.Uuid
+  methodName   String            @default("")
+  kind         PaymentKind?
+  note         String            @default("")
+  userId       String?           @db.Uuid
+  counterId    String?           @db.Uuid
+  offline      Boolean           @default(false)
+  importedFrom String?
+  voidedAt     DateTime?         @db.Timestamptz(3)
+  voidedById   String?           @db.Uuid
+  createdAt    DateTime          @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, supplierId, occurredAt])
+  @@index([branchId, occurredAt])
+  @@map("supplier_ledger_entries")
 }

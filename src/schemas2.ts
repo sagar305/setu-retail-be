@@ -1,6 +1,7 @@
 // Phase 2a request schemas (catalogue, customers, counters, orders).
 import "./zodOpenApi.js";
 import { z } from "zod";
+import { ToolsPatch } from "./schemas4.js";
 
 const Name = z.string().trim().min(1, "Required.").max(120);
 const Paise = z.number().int().min(0).max(1_000_000_000);
@@ -14,6 +15,8 @@ export const SettingsPatchBody = z.object({
   receiptFooter: Text(300).optional(),
   receiptPaperSize: z.enum(["80mm", "58mm", "a4"]).optional(),
   batchTracking: z.boolean().optional(),
+  /** Connected tools to switch on (true) or off (false); others stay as they are. */
+  tools: ToolsPatch.optional(),
 });
 
 export const PaymentMethodBody = z.object({
@@ -120,6 +123,8 @@ export const SettingsDto = z.object({
   receiptFooter: z.string(),
   receiptPaperSize: z.enum(["80mm", "58mm", "a4"]),
   batchTracking: z.boolean(),
+  /** Connected tools: on (true) or switched off by the owner. */
+  tools: z.record(z.string(), z.boolean()),
 });
 export const PaymentMethodDto = z.object({ id: z.uuid(), name: z.string(), kind: Kind, active: z.boolean(), sort: z.number().int() });
 export const CounterDto = z.object({ id: z.uuid(), branchId: z.uuid(), code: z.string(), name: z.string(), lastSeenAt: Iso.nullable() });

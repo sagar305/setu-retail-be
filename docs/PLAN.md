@@ -1,6 +1,6 @@
-# Setu Retail — Cloud POS (premium) — Build Plan v1.5
+# Setu Retail — Cloud POS (premium) — Build Plan v1.6
 
-Status: **all questions answered — awaiting go-ahead for Phase 0**. Nothing has been coded yet.
+Status: Phases 0–3 built. Phase 4a in progress.
 
 ## 1. Confirmed decisions
 
@@ -29,6 +29,17 @@ Status: **all questions answered — awaiting go-ahead for Phase 0**. Nothing ha
 | Email | Sent with **Resend directly** from setu-retail-be and Setu_main |
 | Features | Everything in the free POS + all 12 connected tools rebuilt inside retail FE on cloud data |
 | Phase-1 extras | Import from free POS backup · stock transfer between branches · audit log · super-admin at hidden `/super-admin` route |
+
+### Connected tools (Phase 4, v1.6)
+
+| Area | Decision |
+|---|---|
+| Split | **4a money tools**: Customer Ledger, Cash Book, Expense Tracker, Supplier Book, Purchase Register, Supplier Ledger (expenses and payments work offline). **4b reports**: Invoice Aging, Payables Aging, Profit Dashboard, Stock Register, Barcode Generator, Receipt Designer |
+| On / off | Settings → Connected tools, like the free POS. Owner turns each tool on or off; off tools leave the menu. Udhaar at checkout only while Customer Ledger is on. All on for new accounts |
+| Cash Book | **Per branch, automatic**: cash sales, cash refunds, cash expenses, cash customer payments and cash supplier payments post on their own, plus manual in/out entries. A day's opening = the previous day's closing; the owner sets the first opening balance |
+| Purchases | Supplier bill adds stock to a branch (batches with expiry when batch tracking is on), updates cost price and records **input GST per line** (CGST/SGST or IGST by supplier state). Paid now, on credit, or part-paid with a due date. Purchase returns: credit note (reduces what you owe) or replacement (pending until the goods come back) |
+| Payments | Customer payments clear the **oldest unpaid udhaar first**; payments to suppliers clear the oldest unpaid bills first. Aging is based on that |
+| Old dues | Shops coming from the free browser POS import their **full history** (ledger, supplier ledger, purchases, expenses, cash book). Others enter an **opening balance** per customer or supplier with a date, counted as the oldest bill |
 
 ### Prices (GST included)
 
@@ -225,7 +236,8 @@ None. All answered (v1.5: Contact-sales key limits typed per key; owner picks ac
 | 1 | Auth (sign up, login, reset), accounts, branches, staff, roles, plans + trial + lock, key redeem | BE, FE |
 | 2 | Core POS online: products/categories/batches/stock, customers, payment methods, billing, orders, receipts, held carts, dashboard, reports, settings | BE, FE |
 | 3 | Offline: local DB, outbox, `/sync`, invoice series, conflict flags | BE, FE |
-| 4 | 12 connected tools (expenses, payments received/made offline) | BE, FE |
+| 4a | Money tools: customer ledger, cash book, expenses, suppliers, purchases (+ returns, input GST), supplier ledger; expenses and payments offline; tool on/off; free POS history import | BE, FE |
+| 4b | Reports tools: invoice aging, payables aging, profit dashboard, stock register, barcode generator, receipt designer | BE, FE |
 | 5 | Multi-branch: transfers, branch reports, audit log viewer | BE, FE |
 | 6 | Setu_main: retail key, pricing, buy page, checkout, webhook, email | Setu_main |
 | 7 | Super-admin, import from free POS backup (`POS_BACKUP.json`) | BE, FE |

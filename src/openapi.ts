@@ -3,7 +3,8 @@ import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-ope
 import { z, type ZodType } from "zod";
 import * as S from "./schemas.js";
 import * as P from "./schemas2.js";
-import { PinBody, SyncCustomer, SyncCustomersBody, SyncOrder, SyncOrdersBody } from "./routes/sync.js";
+import { PinBody, SyncCustomer, SyncCustomersBody, SyncMoneyBody, SyncMoneyOp, SyncOrder, SyncOrdersBody } from "./routes/sync.js";
+import * as F from "./schemas4.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
@@ -212,7 +213,7 @@ route("get", "/reports/stock-log", `Stock movements in a branch ${Range}`, { tag
 
 route("post", "/imports/products", "Import products (CSV rows); matches SKU, barcode, then name", { tag: "imports", body: ProductImportBody, ok: ImportResult });
 route("post", "/imports/customers", "Import customers (CSV rows); matches mobile, then name", { tag: "imports", body: CustomerImportBody, ok: ImportResult });
-route("post", "/imports/free-pos", "Import a free Browser POS backup (POS_BACKUP.json) into a branch (owner)", { tag: "imports", body: FreePosImportBody, ok: z.object({ products: ImportResult, customers: ImportResult, categories: z.number().int(), paymentMethodsAdded: z.number().int(), batches: z.number().int(), skipped: z.object({ orders: z.number().int() }) }) });
+route("post", "/imports/free-pos", "Import a free Browser POS backup (POS_BACKUP.json) into a branch (owner)", { tag: "imports", body: FreePosImportBody, ok: z.object({ books: z.object({ suppliers: z.number().int(), expenses: z.number().int(), cashEntries: z.number().int(), customerLedger: z.number().int(), supplierLedger: z.number().int(), purchases: z.number().int(), purchaseReturns: z.number().int() }), products: ImportResult, customers: ImportResult, categories: z.number().int(), paymentMethodsAdded: z.number().int(), batches: z.number().int(), skipped: z.object({ orders: z.number().int() }) }) });
 
 // ── Phase 3: offline ──
 const device = registry.registerComponent("securitySchemes", "deviceKey", { type: "apiKey", in: "header", name: "X-Device-Key" });
@@ -232,7 +233,11 @@ const OfflinePack = registry.register("OfflinePack", z.object({
   batches: z.array(Batch),
   customers: z.array(Customer),
   users: z.array(z.object({ id: z.string(), name: z.string(), username: z.string(), role: S.RoleEnum, pin: z.object({ hash: z.string(), salt: z.string(), iterations: z.number().int() }) })),
+  customerBalances: z.array(z.object({ customerId: z.string(), balance: z.number().int() })),
+  suppliers: z.array(z.object({ id: z.string(), name: z.string(), phone: z.string(), balance: z.number().int() })),
+  expenseCategories: z.array(z.string()),
 }));
+registry.register("SyncMoneyOp", SyncMoneyOp);
 route("get", "/me/pin", "Has the signed-in user set a counter PIN?", { tag: "offline", ok: z.object({ pinSet: z.boolean() }) });
 route("put", "/me/pin", "Set the counter PIN for offline sign-in (needs the password)", { tag: "offline", body: PinBody, ok: z.object({ pinSet: z.literal(true) }) });
 route("delete", "/me/pin", "Remove the counter PIN", { tag: "offline", ok: null, status: 204 });
@@ -241,6 +246,7 @@ for (const [method, path, summary, body, ok] of [
   ["get", "/sync/pack", "Everything a counter needs to bill offline (X-Device-Key)", undefined, OfflinePack],
   ["post", "/sync/customers", "Push customers added offline (X-Device-Key)", SyncCustomersBody, SyncResults],
   ["post", "/sync/orders", "Push bills made offline; saved as charged; 402 while the plan has ended (X-Device-Key)", SyncOrdersBody, SyncResults],
+  ["post", "/sync/money", "Push expenses, payments received and payments made offline (ops: SyncMoneyOp[]); 402 while the plan has ended (X-Device-Key)", SyncMoneyBody, SyncResults],
 ] as const) {
   registry.registerPath({
     method,
@@ -251,6 +257,56 @@ for (const [method, path, summary, body, ok] of [
     request: body ? { body: { content: { "application/json": { schema: body } } } } : undefined,
     responses: { 200: { description: "OK", ...json(ok) }, ...errors, 402: { description: "Plan ended", ...json(ErrorResponse) } },
   });
+}
+
+// ── Phase 4a: connected money tools ──
+{
+  const Supplier = registry.register("Supplier", F.SupplierDto);
+  const Expense = registry.register("Expense", F.ExpenseDto);
+  const Statement = registry.register("Statement", F.StatementDto);
+  const CashBook = registry.register("CashBook", F.CashBookDto);
+  const Purchase = registry.register("Purchase", F.PurchaseDto);
+  const PurchaseSummary = registry.register("PurchaseSummary", F.PurchaseSummaryDto);
+  registry.register("PurchaseBody", F.PurchaseBody);
+  const M = z.number().int();
+  const t = "tools";
+  route("get", "/suppliers", "Suppliers with what you owe each (?q=)", { tag: t, ok: z.object({ suppliers: z.array(Supplier) }) });
+  route("post", "/suppliers", "Add a supplier", { tag: t, body: F.SupplierBody, ok: z.object({ supplier: Supplier }), status: 201 });
+  route("get", "/suppliers/{id}", "A supplier", { tag: t, ok: z.object({ supplier: Supplier }) });
+  route("patch", "/suppliers/{id}", "Edit a supplier", { tag: t, body: F.SupplierPatchBody, ok: z.object({ supplier: Supplier }) });
+  route("delete", "/suppliers/{id}", "Remove a supplier with nothing owed", { tag: t, ok: null, status: 204 });
+
+  route("get", "/expense-categories", "Expense categories (defaults + used)", { tag: t, ok: z.object({ categories: z.array(z.string()) }) });
+  route("get", "/expenses", "Expenses (?branchId=&from=&to= yyyy-mm-dd, &category=) with totals by category", { tag: t, ok: z.object({ from: z.string(), to: z.string(), total: M, byCategory: z.array(z.object({ category: z.string(), amount: M })), expenses: z.array(Expense) }) });
+  route("post", "/expenses", "Record an expense (idempotent on id)", { tag: t, body: F.ExpenseBody, ok: z.object({ expense: Expense, replayed: z.boolean().optional() }), status: 201 });
+  route("patch", "/expenses/{id}", "Edit an expense", { tag: t, body: F.ExpensePatchBody, ok: z.object({ expense: Expense }) });
+  route("delete", "/expenses/{id}", "Delete an expense", { tag: t, ok: null, status: 204 });
+
+  const withCustomer = Statement.extend({ customer: Customer });
+  route("get", "/ledger/customers", "Customers with udhaar (or advance) balances", { tag: t, ok: z.object({ owed: M, advance: M, customers: z.array(z.object({ customer: Customer, balance: M })) }) });
+  route("get", "/customers/{id}/ledger", "A customer's udhaar statement; payments clear the oldest bills first", { tag: t, ok: withCustomer });
+  route("post", "/customers/{id}/payments", "Receive a payment (any role; idempotent on id)", { tag: t, body: F.PaymentBody, ok: withCustomer, status: 201 });
+  route("post", "/customers/{id}/opening", "Udhaar from before Setu Retail (owner/manager)", { tag: t, body: F.OpeningBody, ok: withCustomer, status: 201 });
+  route("post", "/ledger/customer-entries/{id}/void", "Undo a payment or opening entry", { tag: t, body: F.VoidBody, ok: Statement });
+
+  const withSupplier = Statement.extend({ supplier: Supplier });
+  route("get", "/ledger/suppliers", "Suppliers you owe (or have an advance with)", { tag: t, ok: z.object({ owed: M, advance: M, suppliers: z.array(z.object({ supplier: Supplier, balance: M })) }) });
+  route("get", "/suppliers/{id}/ledger", "A supplier statement; payments clear the oldest bills first", { tag: t, ok: withSupplier });
+  route("post", "/suppliers/{id}/payments", "Record a payment made (idempotent on id)", { tag: t, body: F.PaymentBody, ok: withSupplier, status: 201 });
+  route("post", "/suppliers/{id}/opening", "Dues from before Setu Retail", { tag: t, body: F.OpeningBody, ok: withSupplier, status: 201 });
+  route("post", "/ledger/supplier-entries/{id}/void", "Undo a payment or opening entry", { tag: t, body: F.VoidBody, ok: Statement });
+
+  route("get", "/cash-book", "A branch's cash book by day (?branchId=&from=&to= yyyy-mm-dd, up to 3 months)", { tag: t, ok: CashBook });
+  route("post", "/cash-book/entries", "Add a manual cash in/out line (idempotent on id)", { tag: t, body: F.CashEntryBody, ok: z.object({ saved: z.literal(true) }), status: 201 });
+  route("delete", "/cash-book/entries/{id}", "Delete a manual cash line", { tag: t, ok: null, status: 204 });
+  route("put", "/cash-book/opening", "Set the branch's first opening balance (owner)", { tag: t, body: F.CashOpeningBody, ok: z.object({ opening: z.object({ day: z.string(), amount: M }) }) });
+
+  route("get", "/purchases", "Supplier bills (?branchId=&supplierId=&from=&to=&q=)", { tag: t, ok: z.object({ totals: z.object({ bills: z.number().int(), total: M, inputGst: M }), purchases: z.array(PurchaseSummary) }) });
+  route("post", "/purchases", "Enter a supplier bill: adds stock, sets cost, records input GST (idempotent on id)", { tag: t, body: F.PurchaseBody, ok: z.object({ purchase: Purchase, replayed: z.boolean().optional() }), status: 201 });
+  route("get", "/purchases/{id}", "A supplier bill with items and returns", { tag: t, ok: z.object({ purchase: Purchase }) });
+  route("post", "/purchases/{id}/cancel", "Cancel a supplier bill and take its stock back out", { tag: t, body: F.PurchaseCancelBody, ok: z.object({ purchase: Purchase }) });
+  route("post", "/purchases/{id}/returns", "Return goods to the supplier (credit note or replacement)", { tag: t, body: F.PurchaseReturnBody, ok: z.object({ purchase: Purchase }), status: 201 });
+  route("post", "/purchase-returns/{id}/receive", "The replacement arrived: stock comes back in", { tag: t, body: F.ReplacementBody, ok: z.object({ purchase: Purchase }) });
 }
 
 export function buildOpenApiDocument(version: string) {

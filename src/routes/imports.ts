@@ -15,6 +15,7 @@ import { audit } from "../services/audit.js";
 import { addToOpeningBatch, fromDay, reconcileBatches } from "../services/batches.js";
 import { branchFor, planLimit } from "./access.js";
 import { moveStock } from "./catalogue.js";
+import { importFreePosBooks } from "../services/freePosBooks.js";
 
 const MAX_ROWS = 5000;
 const Paise = z.number().int().min(0).max(1_000_000_000);
@@ -310,7 +311,12 @@ export function importsRouter(ctx: Ctx): Router {
       methodsAdded += 1;
     }
 
+    // Connected-tools history (suppliers, expenses, cash book, ledgers, purchases).
+    const productIds = new Map(products.flatMap((fp, i) => { const pid = p.idMap.get(i + 1); return pid ? [[fp.id, pid] as const] : []; }));
+    const books = await ctx.prisma.$transaction((tx) => importFreePosBooks(tx, { account: a.account, branch, userId: a.user.id, data: d, productIds }), { timeout: 120_000, maxWait: 10_000 });
+
     const summary = {
+      books,
       products: { created: p.created, updated: p.updated, errors: [...unreadable, ...productErrors, ...p.errors] },
       customers: { created: cust.created, updated: cust.updated, errors: cust.errors },
       categories: categories.size,
@@ -318,7 +324,7 @@ export function importsRouter(ctx: Ctx): Router {
       batches: freeBatches.length,
       skipped: { orders: (d.orders ?? []).length },
     };
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "import.free_pos", entityType: "import", data: { branch: branch.code, products: p.created + p.updated, customers: cust.created + cust.updated } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "import.free_pos", entityType: "import", data: { branch: branch.code, products: p.created + p.updated, customers: cust.created + cust.updated, books } });
     res.json(summary);
   });
 

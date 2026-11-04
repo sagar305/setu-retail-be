@@ -4,6 +4,7 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import { isUniqueViolation } from "../db/errors.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
+import { toolOn } from "../services/books.js";
 import { computeBill, placeOfSupply, returnAmounts, type Discount } from "../lib/gst.js";
 import { startOfDay, startOfMonth } from "../lib/time.js";
 import { CancelBody, HeldCartBody, OrderBody, ReturnBody } from "../schemas2.js";
@@ -143,6 +144,9 @@ export function ordersRouter(ctx: Ctx): Router {
     const paid = body.payments.reduce((s, p) => s + p.amount, 0);
     if (paid !== bill.total) {
       throw new AppError(400, "payment_mismatch", `Payments (${(paid / 100).toFixed(2)}) must equal the bill total (${(bill.total / 100).toFixed(2)}).`, { total: bill.total, paid });
+    }
+    if (body.payments.some((p) => methodById.get(p.methodId)!.kind === "CREDIT") && !toolOn(account, "customer-ledger")) {
+      throw new AppError(400, "udhaar_off", "Udhaar is off: the owner can turn on Customer Ledger in Settings → Connected tools.");
     }
     if (body.payments.some((p) => methodById.get(p.methodId)!.kind === "CREDIT") && !customer) {
       throw new AppError(400, "credit_needs_customer", "Pick a saved customer to sell on credit (udhaar).");

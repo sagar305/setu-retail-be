@@ -890,6 +890,12 @@
           },
           "batchTracking": {
             "type": "boolean"
+          },
+          "tools": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
           }
         },
         "required": [
@@ -899,7 +905,8 @@
           "cashierMaxDiscountBp",
           "receiptFooter",
           "receiptPaperSize",
-          "batchTracking"
+          "batchTracking",
+          "tools"
         ]
       },
       "PaymentMethod": {
@@ -3520,6 +3527,56 @@
                 "pin"
               ]
             }
+          },
+          "customerBalances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "customerId": {
+                  "type": "string"
+                },
+                "balance": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "customerId",
+                "balance"
+              ]
+            }
+          },
+          "suppliers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "balance": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "phone",
+                "balance"
+              ]
+            }
+          },
+          "expenseCategories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -3534,7 +3591,1051 @@
           "products",
           "batches",
           "customers",
-          "users"
+          "users",
+          "customerBalances",
+          "suppliers",
+          "expenseCategories"
+        ]
+      },
+      "SyncMoneyOp": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "expense"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              },
+              "methodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "category": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "supplierId": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "uuid"
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "userId",
+              "at",
+              "amount",
+              "methodId",
+              "category"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "customer_payment"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              },
+              "methodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "customerId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "userId",
+              "at",
+              "amount",
+              "methodId",
+              "customerId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "supplier_payment"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "userId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "amount": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              },
+              "methodId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "supplierId": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "required": [
+              "kind",
+              "id",
+              "userId",
+              "at",
+              "amount",
+              "methodId",
+              "supplierId"
+            ]
+          }
+        ]
+      },
+      "Supplier": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "gstin": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "stateCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "balance": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "email",
+          "gstin",
+          "stateCode",
+          "address",
+          "notes",
+          "balance",
+          "createdAt"
+        ]
+      },
+      "Expense": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "branchId": {
+            "type": "string"
+          },
+          "spentAt": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer"
+          },
+          "methodId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "methodName": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "supplierName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userName": {
+            "type": "string"
+          },
+          "offline": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "branchId",
+          "spentAt",
+          "category",
+          "description",
+          "amount",
+          "methodId",
+          "methodName",
+          "kind",
+          "supplierId",
+          "supplierName",
+          "userName",
+          "offline"
+        ]
+      },
+      "Statement": {
+        "type": "object",
+        "properties": {
+          "balance": {
+            "type": "integer"
+          },
+          "open": {
+            "type": "integer"
+          },
+          "advance": {
+            "type": "integer"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string"
+                },
+                "debit": {
+                  "type": "integer"
+                },
+                "credit": {
+                  "type": "integer"
+                },
+                "balance": {
+                  "type": "integer"
+                },
+                "methodName": {
+                  "type": "string"
+                },
+                "branchId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "voidable": {
+                  "type": "boolean"
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "at",
+                "type",
+                "ref",
+                "note",
+                "debit",
+                "credit",
+                "balance",
+                "methodName",
+                "branchId",
+                "voidable",
+                "dueDate"
+              ]
+            }
+          },
+          "openItems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "amount": {
+                  "type": "integer"
+                },
+                "paid": {
+                  "type": "integer"
+                },
+                "open": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "ref",
+                "at",
+                "dueDate",
+                "amount",
+                "paid",
+                "open"
+              ]
+            }
+          }
+        },
+        "required": [
+          "balance",
+          "open",
+          "advance",
+          "rows",
+          "openItems"
+        ]
+      },
+      "CashBook": {
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string"
+          },
+          "opening": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "day": {
+                "type": "string"
+              },
+              "amount": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "day",
+              "amount"
+            ]
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "day": {
+                  "type": "string"
+                },
+                "opening": {
+                  "type": "integer"
+                },
+                "in": {
+                  "type": "integer"
+                },
+                "out": {
+                  "type": "integer"
+                },
+                "closing": {
+                  "type": "integer"
+                },
+                "lines": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "string"
+                      },
+                      "day": {
+                        "type": "string"
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "IN",
+                          "OUT"
+                        ]
+                      },
+                      "amount": {
+                        "type": "integer"
+                      },
+                      "source": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "deletable": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "at",
+                      "day",
+                      "direction",
+                      "amount",
+                      "source",
+                      "label",
+                      "deletable"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "day",
+                "opening",
+                "in",
+                "out",
+                "closing",
+                "lines"
+              ]
+            }
+          }
+        },
+        "required": [
+          "branchId",
+          "opening",
+          "days"
+        ]
+      },
+      "Purchase": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "branchId": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string"
+          },
+          "supplierName": {
+            "type": "string"
+          },
+          "billNumber": {
+            "type": "string"
+          },
+          "billDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interState": {
+            "type": "boolean"
+          },
+          "taxableTotal": {
+            "type": "integer"
+          },
+          "cgstTotal": {
+            "type": "integer"
+          },
+          "sgstTotal": {
+            "type": "integer"
+          },
+          "igstTotal": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "paidAmount": {
+            "type": "integer"
+          },
+          "paidMethodName": {
+            "type": "string"
+          },
+          "returnedTotal": {
+            "type": "integer"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "stockApplied": {
+            "type": "boolean"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "cancelledAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelReason": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "productId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "hsn": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "unitCost": {
+                  "type": "integer"
+                },
+                "gstRateBp": {
+                  "type": "integer"
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "cgst": {
+                  "type": "integer"
+                },
+                "sgst": {
+                  "type": "integer"
+                },
+                "igst": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                },
+                "batchNo": {
+                  "type": "string"
+                },
+                "expiry": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "returnedQtyMilli": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "productId",
+                "name",
+                "hsn",
+                "unit",
+                "qtyMilli",
+                "unitCost",
+                "gstRateBp",
+                "taxable",
+                "cgst",
+                "sgst",
+                "igst",
+                "total",
+                "batchNo",
+                "expiry",
+                "returnedQtyMilli"
+              ]
+            }
+          },
+          "returns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "CREDIT_NOTE",
+                    "REPLACEMENT"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "SETTLED",
+                    "PENDING",
+                    "RECEIVED"
+                  ]
+                },
+                "occurredAt": {
+                  "type": "string"
+                },
+                "receivedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "note": {
+                  "type": "string"
+                },
+                "taxableTotal": {
+                  "type": "integer"
+                },
+                "cgstTotal": {
+                  "type": "integer"
+                },
+                "sgstTotal": {
+                  "type": "integer"
+                },
+                "igstTotal": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "purchaseItemId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "qtyMilli": {
+                        "type": "integer"
+                      },
+                      "taxable": {
+                        "type": "integer"
+                      },
+                      "cgst": {
+                        "type": "integer"
+                      },
+                      "sgst": {
+                        "type": "integer"
+                      },
+                      "igst": {
+                        "type": "integer"
+                      },
+                      "total": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "purchaseItemId",
+                      "name",
+                      "qtyMilli",
+                      "taxable",
+                      "cgst",
+                      "sgst",
+                      "igst",
+                      "total"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "mode",
+                "status",
+                "occurredAt",
+                "receivedAt",
+                "note",
+                "taxableTotal",
+                "cgstTotal",
+                "sgstTotal",
+                "igstTotal",
+                "total",
+                "items"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "branchId",
+          "supplierId",
+          "supplierName",
+          "billNumber",
+          "billDate",
+          "dueDate",
+          "interState",
+          "taxableTotal",
+          "cgstTotal",
+          "sgstTotal",
+          "igstTotal",
+          "total",
+          "paidAmount",
+          "paidMethodName",
+          "returnedTotal",
+          "notes",
+          "stockApplied",
+          "imported",
+          "cancelledAt",
+          "cancelReason",
+          "createdAt",
+          "items",
+          "returns"
+        ]
+      },
+      "PurchaseSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "branchId": {
+            "type": "string"
+          },
+          "supplierId": {
+            "type": "string"
+          },
+          "supplierName": {
+            "type": "string"
+          },
+          "billNumber": {
+            "type": "string"
+          },
+          "billDate": {
+            "type": "string"
+          },
+          "dueDate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "interState": {
+            "type": "boolean"
+          },
+          "taxableTotal": {
+            "type": "integer"
+          },
+          "cgstTotal": {
+            "type": "integer"
+          },
+          "sgstTotal": {
+            "type": "integer"
+          },
+          "igstTotal": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "paidAmount": {
+            "type": "integer"
+          },
+          "paidMethodName": {
+            "type": "string"
+          },
+          "returnedTotal": {
+            "type": "integer"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "stockApplied": {
+            "type": "boolean"
+          },
+          "imported": {
+            "type": "boolean"
+          },
+          "cancelledAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelReason": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "itemCount": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "branchId",
+          "supplierId",
+          "supplierName",
+          "billNumber",
+          "billDate",
+          "dueDate",
+          "interState",
+          "taxableTotal",
+          "cgstTotal",
+          "sgstTotal",
+          "igstTotal",
+          "total",
+          "paidAmount",
+          "paidMethodName",
+          "returnedTotal",
+          "notes",
+          "stockApplied",
+          "imported",
+          "cancelledAt",
+          "cancelReason",
+          "createdAt",
+          "itemCount"
+        ]
+      },
+      "PurchaseBody": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "branchId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "supplierId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "billNumber": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "billDate": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "dueDate": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid"
+                },
+                "name": {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                "hsn": {
+                  "type": "string",
+                  "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                },
+                "qtyMilli": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000000000
+                },
+                "unitCost": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 1000000000
+                },
+                "gstRateBp": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10000
+                },
+                "batchNo": {
+                  "type": "string",
+                  "maxLength": 60
+                },
+                "expiry": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                }
+              },
+              "required": [
+                "qtyMilli",
+                "unitCost",
+                "gstRateBp"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 300
+          },
+          "paidAmount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "paidMethodId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "expectedTotal": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000000000
+          }
+        },
+        "required": [
+          "id",
+          "branchId",
+          "supplierId",
+          "billNumber",
+          "billDate",
+          "lines",
+          "paidAmount"
         ]
       }
     },
@@ -5461,6 +6562,47 @@
                   },
                   "batchTracking": {
                     "type": "boolean"
+                  },
+                  "tools": {
+                    "type": "object",
+                    "properties": {
+                      "receipt-designer": {
+                        "type": "boolean"
+                      },
+                      "customer-ledger": {
+                        "type": "boolean"
+                      },
+                      "cash-book": {
+                        "type": "boolean"
+                      },
+                      "invoice-aging": {
+                        "type": "boolean"
+                      },
+                      "expense-tracker": {
+                        "type": "boolean"
+                      },
+                      "purchase-register": {
+                        "type": "boolean"
+                      },
+                      "supplier-book": {
+                        "type": "boolean"
+                      },
+                      "supplier-ledger": {
+                        "type": "boolean"
+                      },
+                      "payables-aging": {
+                        "type": "boolean"
+                      },
+                      "profit-dashboard": {
+                        "type": "boolean"
+                      },
+                      "stock-register": {
+                        "type": "boolean"
+                      },
+                      "barcode-generator": {
+                        "type": "boolean"
+                      }
+                    }
                   }
                 }
               }
@@ -8678,6 +9820,41 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "books": {
+                      "type": "object",
+                      "properties": {
+                        "suppliers": {
+                          "type": "integer"
+                        },
+                        "expenses": {
+                          "type": "integer"
+                        },
+                        "cashEntries": {
+                          "type": "integer"
+                        },
+                        "customerLedger": {
+                          "type": "integer"
+                        },
+                        "supplierLedger": {
+                          "type": "integer"
+                        },
+                        "purchases": {
+                          "type": "integer"
+                        },
+                        "purchaseReturns": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "suppliers",
+                        "expenses",
+                        "cashEntries",
+                        "customerLedger",
+                        "supplierLedger",
+                        "purchases",
+                        "purchaseReturns"
+                      ]
+                    },
                     "products": {
                       "$ref": "#/components/schemas/ImportResult"
                     },
@@ -8706,6 +9883,7 @@
                     }
                   },
                   "required": [
+                    "books",
                     "products",
                     "customers",
                     "categories",
@@ -9181,6 +10359,2423 @@
           },
           "402": {
             "description": "Plan ended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sync/money": {
+      "post": {
+        "summary": "Push expenses, payments received and payments made offline (ops: SyncMoneyOp[]); 402 while the plan has ended (X-Device-Key)",
+        "tags": [
+          "offline"
+        ],
+        "security": [
+          {
+            "deviceKey": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ops": {
+                    "type": "array",
+                    "items": {},
+                    "minItems": 1,
+                    "maxItems": 500
+                  }
+                },
+                "required": [
+                  "ops"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncResults"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Plan ended",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers": {
+      "get": {
+        "summary": "Suppliers with what you owe each (?q=)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "suppliers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Supplier"
+                      }
+                    }
+                  },
+                  "required": [
+                    "suppliers"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a supplier",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "gstin": {
+                    "type": "string",
+                    "maxLength": 15
+                  },
+                  "stateCode": {
+                    "type": "string",
+                    "maxLength": 2
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "supplier": {
+                      "$ref": "#/components/schemas/Supplier"
+                    }
+                  },
+                  "required": [
+                    "supplier"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}": {
+      "get": {
+        "summary": "A supplier",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "supplier": {
+                      "$ref": "#/components/schemas/Supplier"
+                    }
+                  },
+                  "required": [
+                    "supplier"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Edit a supplier",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "phone": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "email": {
+                    "type": "string",
+                    "maxLength": 200
+                  },
+                  "gstin": {
+                    "type": "string",
+                    "maxLength": 15
+                  },
+                  "stateCode": {
+                    "type": "string",
+                    "maxLength": 2
+                  },
+                  "address": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "supplier": {
+                      "$ref": "#/components/schemas/Supplier"
+                    }
+                  },
+                  "required": [
+                    "supplier"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a supplier with nothing owed",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/expense-categories": {
+      "get": {
+        "summary": "Expense categories (defaults + used)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "categories"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/expenses": {
+      "get": {
+        "summary": "Expenses (?branchId=&from=&to= yyyy-mm-dd, &category=) with totals by category",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "from": {
+                      "type": "string"
+                    },
+                    "to": {
+                      "type": "string"
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "byCategory": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "category": {
+                            "type": "string"
+                          },
+                          "amount": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "category",
+                          "amount"
+                        ]
+                      }
+                    },
+                    "expenses": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Expense"
+                      }
+                    }
+                  },
+                  "required": [
+                    "from",
+                    "to",
+                    "total",
+                    "byCategory",
+                    "expenses"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Record an expense (idempotent on id)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "spentAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "methodId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "supplierId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "id",
+                  "branchId",
+                  "category",
+                  "amount",
+                  "methodId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expense": {
+                      "$ref": "#/components/schemas/Expense"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "expense"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/expenses/{id}": {
+      "patch": {
+        "summary": "Edit an expense",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "spentAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "description": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "methodId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "supplierId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "expense": {
+                      "$ref": "#/components/schemas/Expense"
+                    }
+                  },
+                  "required": [
+                    "expense"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete an expense",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ledger/customers": {
+      "get": {
+        "summary": "Customers with udhaar (or advance) balances",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owed": {
+                      "type": "integer"
+                    },
+                    "advance": {
+                      "type": "integer"
+                    },
+                    "customers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "customer": {
+                            "$ref": "#/components/schemas/Customer"
+                          },
+                          "balance": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "customer",
+                          "balance"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "owed",
+                    "advance",
+                    "customers"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/ledger": {
+      "get": {
+        "summary": "A customer's udhaar statement; payments clear the oldest bills first",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "customer": {
+                          "$ref": "#/components/schemas/Customer"
+                        }
+                      },
+                      "required": [
+                        "customer"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/payments": {
+      "post": {
+        "summary": "Receive a payment (any role; idempotent on id)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "methodId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "branchId",
+                  "amount",
+                  "methodId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "customer": {
+                          "$ref": "#/components/schemas/Customer"
+                        }
+                      },
+                      "required": [
+                        "customer"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/customers/{id}/opening": {
+      "post": {
+        "summary": "Udhaar from before Setu Retail (owner/manager)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "amount",
+                  "date"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "customer": {
+                          "$ref": "#/components/schemas/Customer"
+                        }
+                      },
+                      "required": [
+                        "customer"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ledger/customer-entries/{id}/void": {
+      "post": {
+        "summary": "Undo a payment or opening entry",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Statement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ledger/suppliers": {
+      "get": {
+        "summary": "Suppliers you owe (or have an advance with)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "owed": {
+                      "type": "integer"
+                    },
+                    "advance": {
+                      "type": "integer"
+                    },
+                    "suppliers": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "supplier": {
+                            "$ref": "#/components/schemas/Supplier"
+                          },
+                          "balance": {
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "supplier",
+                          "balance"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "owed",
+                    "advance",
+                    "suppliers"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}/ledger": {
+      "get": {
+        "summary": "A supplier statement; payments clear the oldest bills first",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "supplier": {
+                          "$ref": "#/components/schemas/Supplier"
+                        }
+                      },
+                      "required": [
+                        "supplier"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}/payments": {
+      "post": {
+        "summary": "Record a payment made (idempotent on id)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "methodId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "branchId",
+                  "amount",
+                  "methodId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "supplier": {
+                          "$ref": "#/components/schemas/Supplier"
+                        }
+                      },
+                      "required": [
+                        "supplier"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/suppliers/{id}/opening": {
+      "post": {
+        "summary": "Dues from before Setu Retail",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "date": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "dueDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "amount",
+                  "date"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Statement"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "supplier": {
+                          "$ref": "#/components/schemas/Supplier"
+                        }
+                      },
+                      "required": [
+                        "supplier"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ledger/supplier-entries/{id}/void": {
+      "post": {
+        "summary": "Undo a payment or opening entry",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Statement"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cash-book": {
+      "get": {
+        "summary": "A branch's cash book by day (?branchId=&from=&to= yyyy-mm-dd, up to 3 months)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CashBook"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cash-book/entries": {
+      "post": {
+        "summary": "Add a manual cash in/out line (idempotent on id)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "IN",
+                      "OUT"
+                    ]
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000000
+                  },
+                  "description": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "occurredAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "id",
+                  "branchId",
+                  "type",
+                  "amount",
+                  "description"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "saved": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ]
+                    }
+                  },
+                  "required": [
+                    "saved"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cash-book/entries/{id}": {
+      "delete": {
+        "summary": "Delete a manual cash line",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cash-book/opening": {
+      "put": {
+        "summary": "Set the branch's first opening balance (owner)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "day": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "amount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  }
+                },
+                "required": [
+                  "branchId",
+                  "day",
+                  "amount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "opening": {
+                      "type": "object",
+                      "properties": {
+                        "day": {
+                          "type": "string"
+                        },
+                        "amount": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "day",
+                        "amount"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "opening"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases": {
+      "get": {
+        "summary": "Supplier bills (?branchId=&supplierId=&from=&to=&q=)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "totals": {
+                      "type": "object",
+                      "properties": {
+                        "bills": {
+                          "type": "integer"
+                        },
+                        "total": {
+                          "type": "integer"
+                        },
+                        "inputGst": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "bills",
+                        "total",
+                        "inputGst"
+                      ]
+                    },
+                    "purchases": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PurchaseSummary"
+                      }
+                    }
+                  },
+                  "required": [
+                    "totals",
+                    "purchases"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Enter a supplier bill: adds stock, sets cost, records input GST (idempotent on id)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "branchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "supplierId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "billNumber": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "billDate": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "dueDate": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "productId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "uuid"
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 200
+                        },
+                        "hsn": {
+                          "type": "string",
+                          "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                        },
+                        "qtyMilli": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000000
+                        },
+                        "unitCost": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 1000000000
+                        },
+                        "gstRateBp": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        },
+                        "batchNo": {
+                          "type": "string",
+                          "maxLength": 60
+                        },
+                        "expiry": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                        }
+                      },
+                      "required": [
+                        "qtyMilli",
+                        "unitCost",
+                        "gstRateBp"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 300
+                  },
+                  "paidAmount": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  },
+                  "paidMethodId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  },
+                  "notes": {
+                    "type": "string",
+                    "maxLength": 500
+                  },
+                  "expectedTotal": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  }
+                },
+                "required": [
+                  "id",
+                  "branchId",
+                  "supplierId",
+                  "billNumber",
+                  "billDate",
+                  "lines",
+                  "paidAmount"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purchase": {
+                      "$ref": "#/components/schemas/Purchase"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{id}": {
+      "get": {
+        "summary": "A supplier bill with items and returns",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purchase": {
+                      "$ref": "#/components/schemas/Purchase"
+                    }
+                  },
+                  "required": [
+                    "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{id}/cancel": {
+      "post": {
+        "summary": "Cancel a supplier bill and take its stock back out",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purchase": {
+                      "$ref": "#/components/schemas/Purchase"
+                    }
+                  },
+                  "required": [
+                    "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchases/{id}/returns": {
+      "post": {
+        "summary": "Return goods to the supplier (credit note or replacement)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "CREDIT_NOTE",
+                      "REPLACEMENT"
+                    ]
+                  },
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "purchaseItemId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "qtyMilli": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "purchaseItemId",
+                        "qtyMilli"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 300
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "mode",
+                  "items"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purchase": {
+                      "$ref": "#/components/schemas/Purchase"
+                    }
+                  },
+                  "required": [
+                    "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/purchase-returns/{id}/receive": {
+      "post": {
+        "summary": "The replacement arrived: stock comes back in",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "batchNo": {
+                    "type": "string",
+                    "maxLength": 60
+                  },
+                  "expiry": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "purchase": {
+                      "$ref": "#/components/schemas/Purchase"
+                    }
+                  },
+                  "required": [
+                    "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
             "content": {
               "application/json": {
                 "schema": {

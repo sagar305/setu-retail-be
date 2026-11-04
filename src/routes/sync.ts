@@ -24,6 +24,8 @@ import { DiscountBody } from "../schemas2.js";
 import { branchFor } from "./access.js";
 import { batchDto, productDto, shopToday } from "./catalogue.js";
 import { sortFefo, toDay } from "../services/batches.js";
+import { customerBalances, supplierBalances, toolOn } from "../services/books.js";
+import { DEFAULT_EXPENSE_CATEGORIES, moneyMethod } from "./books.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
 export const PinBody = z.object({ pin: z.string().regex(PIN_PATTERN, "4 to 6 digits."), password: z.string().min(1) });
@@ -63,6 +65,13 @@ export const SyncOrder = z.object({
   total: Paise,
   note: z.string().max(300).optional(),
 });
+const OpBase = { id: z.uuid(), userId: z.uuid(), at: z.iso.datetime(), amount: z.number().int().min(1).max(1_000_000_000), methodId: z.uuid() };
+export const SyncMoneyOp = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("expense"), ...OpBase, category: z.string().trim().min(1).max(120), description: z.string().trim().max(300).optional(), supplierId: z.uuid().nullable().optional() }),
+  z.object({ kind: z.literal("customer_payment"), ...OpBase, customerId: z.uuid(), note: z.string().trim().max(300).optional() }),
+  z.object({ kind: z.literal("supplier_payment"), ...OpBase, supplierId: z.uuid(), note: z.string().trim().max(300).optional() }),
+]);
+export const SyncMoneyBody = z.object({ ops: z.array(z.unknown()).min(1).max(500) });
 export const SyncCustomersBody = z.object({ customers: z.array(SyncCustomer).max(1000) });
 export const SyncOrdersBody = z.object({ orders: z.array(z.unknown()).min(1).max(200) });
 
@@ -108,7 +117,7 @@ export function syncRouter(ctx: Ctx): Router {
   // ── Offline pack ──
   router.get("/sync/pack", deviceAuth(ctx), async (req, res) => {
     const { counter, branch, account, plan } = device(req);
-    const [methods, categories, products, customers, users, batches] = await Promise.all([
+    const [methods, categories, products, customers, users, batches, balances, suppliers, usedCategories] = await Promise.all([
       ctx.prisma.paymentMethod.findMany({ where: { accountId: account.id, active: true }, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
       ctx.prisma.category.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { name: "asc" } }),
       ctx.prisma.product.findMany({ where: { accountId: account.id, archivedAt: null }, include: { branches: { where: { branchId: branch.id } } }, orderBy: { name: "asc" } }),
@@ -124,7 +133,13 @@ export function syncRouter(ctx: Ctx): Router {
         select: { id: true, name: true, username: true, role: true, pinHash: true, pinSalt: true, pinIterations: true },
       }),
       account.batchTracking ? ctx.prisma.batch.findMany({ where: { branchId: branch.id, qtyMilli: { gt: 0 } } }) : Promise.resolve([]),
+      toolOn(account, "customer-ledger") ? customerBalances(ctx.prisma, account.id) : Promise.resolve(new Map<string, number>()),
+      toolOn(account, "supplier-ledger") || toolOn(account, "expense-tracker") ? ctx.prisma.supplier.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { name: "asc" }, take: 2000 }) : Promise.resolve([]),
+      toolOn(account, "expense-tracker") ? ctx.prisma.expense.groupBy({ by: ["category"], where: { accountId: account.id, deletedAt: null } }) : Promise.resolve([]),
     ]);
+    const supplierOwed = suppliers.length ? await supplierBalances(ctx.prisma, account.id, suppliers.map((x) => x.id)) : new Map<string, number>();
+    const expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
+    for (const u of usedCategories) if (!expenseCategories.some((c) => c.toLowerCase() === u.category.toLowerCase())) expenseCategories.push(u.category);
     const today = shopToday(ctx.now(), account.timezone);
     const nextExpiry = new Map<string, string>();
     for (const b of sortFefo(batches)) if (b.expiry && !nextExpiry.has(b.productId)) nextExpiry.set(b.productId, toDay(b.expiry)!);
@@ -143,6 +158,10 @@ export function syncRouter(ctx: Ctx): Router {
       batches: sortFefo(batches).map((b) => batchDto(b, today, false)),
       customers: customers.map(customerDto),
       users: users.map((u) => ({ id: u.id, name: u.name, username: u.username, role: u.role, pin: { hash: u.pinHash!, salt: u.pinSalt!, iterations: u.pinIterations! } })),
+      // Connected tools that work offline: udhaar balances, suppliers (payments made), expense categories.
+      customerBalances: [...balances].map(([customerId, balance]) => ({ customerId, balance })),
+      suppliers: suppliers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, balance: supplierOwed.get(x.id) ?? 0 })),
+      expenseCategories,
     });
   });
 
@@ -259,6 +278,70 @@ export function syncRouter(ctx: Ctx): Router {
     }
     const saved = results.filter((r) => r.status === "saved").length;
     if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, action: "sync.orders", entityType: "counter", entityId: counter.id, data: { saved, rejected: results.filter((r) => r.status === "rejected").length } });
+    res.json({ results });
+  });
+
+  // Expenses, payments received and payments made while offline. Each op is
+  // saved once (by id); the person on it must be allowed to do it in this branch.
+  router.post("/sync/money", deviceAuth(ctx), async (req, res) => {
+    const { counter, branch, account, plan } = device(req);
+    if (plan.expired) throw new AppError(402, "plan_expired", "The plan has ended. Offline work waits on this counter until it's renewed.");
+    const { ops } = SyncMoneyBody.parse(req.body);
+    const now = ctx.now();
+    const results: SyncResult[] = [];
+    for (const raw of ops) {
+      const parsed = SyncMoneyOp.safeParse(raw);
+      const rawId = (raw as { id?: unknown })?.id;
+      if (!parsed.success) {
+        results.push({ id: typeof rawId === "string" ? rawId : "", status: "rejected", message: parsed.error.issues[0]?.message ?? "Invalid entry" });
+        continue;
+      }
+      const op = parsed.data;
+      try {
+        const existing =
+          op.kind === "expense"
+            ? await ctx.prisma.expense.findUnique({ where: { id: op.id }, select: { accountId: true } })
+            : op.kind === "customer_payment"
+              ? await ctx.prisma.customerLedgerEntry.findUnique({ where: { id: op.id }, select: { accountId: true } })
+              : await ctx.prisma.supplierLedgerEntry.findUnique({ where: { id: op.id }, select: { accountId: true } });
+        if (existing) {
+          results.push(existing.accountId === account.id ? { id: op.id, status: "duplicate" } : { id: op.id, status: "rejected", message: "Id already used." });
+          continue;
+        }
+        const user = await ctx.prisma.user.findFirst({ where: { id: op.userId, accountId: account.id }, include: { branches: true } });
+        if (!user || (user.role !== "OWNER" && !user.branches.some((b) => b.branchId === branch.id))) throw new AppError(400, "unknown_user", "The person on this entry doesn't work in this branch.");
+        if (op.kind !== "customer_payment" && user.role === "CASHIER") throw new AppError(403, "forbidden", "Only the owner or a manager can record this.");
+        const m = await moneyMethod(ctx.prisma, account.id, op.methodId);
+        const occurredAt = new Date(Math.min(new Date(op.at).getTime(), now.getTime()));
+        const common = { id: op.id, accountId: account.id, methodId: m.id, methodName: m.name, kind: m.kind, userId: user.id, counterId: counter.id, offline: true };
+        if (op.kind === "expense") {
+          const supplierOk = !op.supplierId || (await ctx.prisma.supplier.count({ where: { id: op.supplierId, accountId: account.id } })) > 0;
+          await ctx.prisma.expense.create({ data: { ...common, branchId: branch.id, spentAt: occurredAt, category: op.category, description: op.description ?? "", amount: op.amount, supplierId: supplierOk ? (op.supplierId ?? null) : null } });
+        } else if (op.kind === "customer_payment") {
+          const c = await ctx.prisma.customer.findFirst({ where: { id: op.customerId, accountId: account.id } });
+          if (!c) {
+            results.push({ id: op.id, status: "retry", message: "Customer not synced yet." });
+            continue;
+          }
+          await ctx.prisma.customerLedgerEntry.create({ data: { ...common, customerId: c.id, branchId: branch.id, type: "PAYMENT", amount: op.amount, occurredAt, note: op.note ?? "" } });
+        } else {
+          const sup = await ctx.prisma.supplier.findFirst({ where: { id: op.supplierId, accountId: account.id } });
+          if (!sup) throw new AppError(400, "unknown_supplier", "Supplier not found.");
+          await ctx.prisma.supplierLedgerEntry.create({ data: { ...common, supplierId: sup.id, branchId: branch.id, type: "PAYMENT", amount: op.amount, occurredAt, note: op.note ?? "" } });
+        }
+        results.push({ id: op.id, status: "saved" });
+      } catch (err) {
+        if (isUniqueViolation(err)) results.push({ id: op.id, status: "duplicate" });
+        else if (err instanceof AppError) results.push({ id: op.id, status: "rejected", message: err.message });
+        else {
+          req.log?.error({ err, opId: op.id }, "offline money entry failed to sync");
+          results.push({ id: op.id, status: "retry", message: "Couldn't save this right now." });
+        }
+      }
+    }
+    await ctx.prisma.counter.update({ where: { id: counter.id }, data: { lastSeenAt: now } });
+    const saved = results.filter((r) => r.status === "saved").length;
+    if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, action: "sync.money", entityType: "counter", entityId: counter.id, data: { saved } });
     res.json({ results });
   });
 

@@ -8,6 +8,7 @@ import { audit } from "../services/audit.js";
 import { startBatchTracking } from "../services/batches.js";
 import { branchFor } from "./access.js";
 import { newDeviceKey } from "../auth/device.js";
+import { TOOL_SLUGS, toolsDto } from "../services/books.js";
 
 export const settingsDto = (a: Account) => ({
   business: { name: a.name, phone: a.phone, taxNumber: a.taxNumber, currency: a.currency, timezone: a.timezone },
@@ -17,6 +18,7 @@ export const settingsDto = (a: Account) => ({
   receiptFooter: a.receiptFooter,
   receiptPaperSize: a.receiptPaperSize as "80mm" | "58mm" | "a4",
   batchTracking: a.batchTracking,
+  tools: toolsDto(a),
 });
 
 export const DEFAULT_PAYMENT_METHODS = [
@@ -36,14 +38,15 @@ export function settingsRouter(ctx: Ctx): Router {
 
   router.patch("/settings", requireRole("OWNER"), async (req, res) => {
     const a = auth(req);
-    const body = SettingsPatchBody.parse(req.body);
+    const { tools, ...body } = SettingsPatchBody.parse(req.body);
+    const disabledTools = tools ? TOOL_SLUGS.filter((t) => (tools[t] === undefined ? a.account.disabledTools.includes(t) : !tools[t])) : undefined;
     const account = await ctx.prisma.$transaction(async (tx) => {
-      const updated = await tx.account.update({ where: { id: a.account.id }, data: body });
+      const updated = await tx.account.update({ where: { id: a.account.id }, data: { ...body, disabledTools } });
       // Turning batches on: current stock becomes an opening batch per product.
       if (body.batchTracking && !a.account.batchTracking) await startBatchTracking(tx, a.account.id, ctx.now());
       return updated;
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "settings.updated", entityType: "account", entityId: a.account.id, data: body });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "settings.updated", entityType: "account", entityId: a.account.id, data: { ...body, ...(tools ? { tools } : {}) } });
     res.json(settingsDto(account));
   });
 
