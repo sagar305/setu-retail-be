@@ -7,6 +7,7 @@ import { CounterBody, CounterPatchBody, PaymentMethodBody, SettingsPatchBody } f
 import { audit } from "../services/audit.js";
 import { startBatchTracking } from "../services/batches.js";
 import { branchFor } from "./access.js";
+import { newDeviceKey } from "../auth/device.js";
 
 export const settingsDto = (a: Account) => ({
   business: { name: a.name, phone: a.phone, taxNumber: a.taxNumber, currency: a.currency, timezone: a.timezone },
@@ -90,10 +91,14 @@ export function settingsRouter(ctx: Ctx): Router {
       await tx.branch.update({ where: { id: branch.id }, data: { updatedAt: ctx.now() } }); // row lock
       const last = await tx.counter.findFirst({ where: { branchId: branch.id }, orderBy: { number: "desc" } });
       const number = (last?.number ?? 0) + 1;
-      return tx.counter.create({ data: { branchId: branch.id, number, code: `C${number}`, name: body.name || `Counter ${number}`, lastSeenAt: ctx.now() } });
+      const created = await tx.counter.create({ data: { branchId: branch.id, number, code: `C${number}`, name: body.name || `Counter ${number}`, lastSeenAt: ctx.now() } });
+      const key = newDeviceKey(created.id);
+      await tx.counter.update({ where: { id: created.id }, data: { deviceKeyHash: key.hash } });
+      return { ...created, deviceKey: key.key };
     });
     await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "counter.created", entityType: "counter", entityId: counter.id, data: { branch: branch.code, code: counter.code } });
-    res.status(201).json({ counter: counterDto(counter) });
+    // The device key is shown once; the device keeps it to sync offline bills.
+    res.status(201).json({ counter: counterDto(counter), deviceKey: counter.deviceKey });
   });
 
   router.patch("/counters/:id", requireRole("OWNER", "MANAGER"), async (req, res) => {

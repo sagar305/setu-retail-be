@@ -10,20 +10,12 @@ import { CancelBody, HeldCartBody, OrderBody, ReturnBody } from "../schemas2.js"
 import { audit } from "../services/audit.js";
 import { branchFor, planLimit } from "./access.js";
 import { moveStock } from "./catalogue.js";
-import { blendedUnitCost, restoreToBatches, takeFromBatches } from "../services/batches.js";
+import { restoreToBatches } from "../services/batches.js";
+import { invoiceNumberFor, invoiceSeq, orderInclude, persistOrder, type FullOrder } from "../services/orderWriter.js";
 
 const pad = (n: number) => String(n).padStart(5, "0");
 
-const orderInclude = {
-  items: { orderBy: { position: "asc" }, include: { batches: { include: { batch: { select: { batchNo: true, expiry: true } } } } } },
-  payments: true,
-  creditNotes: { include: { items: true }, orderBy: { createdAt: "asc" } },
-  counter: { select: { code: true, name: true } },
-  branch: { select: { id: true, code: true, name: true, address: true, phone: true, gstin: true, stateCode: true } },
-} satisfies Prisma.OrderInclude;
-type FullOrder = Prisma.OrderGetPayload<{ include: typeof orderInclude }>;
-
-function orderDto(o: FullOrder, cashierName?: string) {
+export function orderDto(o: FullOrder, cashierName?: string) {
   return {
     id: o.id,
     invoiceNumber: o.invoiceNumber,
@@ -49,6 +41,8 @@ function orderDto(o: FullOrder, cashierName?: string) {
     note: o.note,
     cancelledAt: o.cancelledAt?.toISOString() ?? null,
     cancelReason: o.cancelReason,
+    offline: o.offline,
+    priceDiffers: o.priceDiffers,
     items: o.items.map((i) => ({
       id: i.id,
       productId: i.productId,
@@ -93,7 +87,7 @@ async function loadOrder(ctx: Ctx, a: AuthContext, id: string): Promise<FullOrde
   return o;
 }
 
-async function withCashier(ctx: Ctx, o: FullOrder) {
+export async function withCashier(ctx: Ctx, o: FullOrder) {
   const u = await ctx.prisma.user.findUnique({ where: { id: o.cashierId }, select: { name: true } });
   return orderDto(o, u?.name);
 }
@@ -162,112 +156,50 @@ export function ordersRouter(ctx: Ctx): Router {
       }
     }
 
-    // Quantity per stocked product (the same product can appear on two lines).
-    const need = new Map<string, number>();
-    for (const l of body.lines) if (byId.get(l.productId)!.trackStock) need.set(l.productId, (need.get(l.productId) ?? 0) + l.qtyMilli);
-
     let order: FullOrder;
     try {
       order = await ctx.prisma.$transaction(async (tx) => {
-        const c = await tx.counter.update({ where: { id: counter.id }, data: { nextInvoiceNumber: { increment: 1 }, lastSeenAt: ctx.now() } });
-        const invoiceNumber = `${branch.code}-${c.code}-${pad(c.nextInvoiceNumber - 1)}`;
-
-        if (!account.allowNegativeStock) {
-          const short: string[] = [];
-          for (const [productId, qty] of need) {
-            const r = await tx.branchProduct.updateMany({ where: { branchId: branch.id, productId, stockMilli: { gte: qty } }, data: { stockMilli: { decrement: qty } } });
-            if (r.count === 0) short.push(productId);
-          }
-          if (short.length) {
-            throw new AppError(409, "out_of_stock", `Not enough stock: ${short.map((id) => byId.get(id)!.name).join(", ")}.`, { productIds: short });
-          }
+        // The device numbers its own bills (so an offline bill keeps its number);
+        // older clients leave it out and the counter's next number is used.
+        let invoiceNumber: string;
+        if (body.invoiceNumber) {
+          const seq = invoiceSeq(body.invoiceNumber, branch.code, counter.code);
+          if (seq === null) throw new AppError(400, "bad_invoice_number", `Bill numbers on this counter look like ${invoiceNumberFor(branch.code, counter.code, 1)}.`);
+          invoiceNumber = body.invoiceNumber;
+          await tx.counter.update({ where: { id: counter.id }, data: { lastSeenAt: ctx.now() } });
+          await tx.$executeRaw`UPDATE "counters" SET "nextInvoiceNumber" = GREATEST("nextInvoiceNumber", ${seq + 1}) WHERE "id" = ${counter.id}::uuid`;
+        } else {
+          const c = await tx.counter.update({ where: { id: counter.id }, data: { nextInvoiceNumber: { increment: 1 }, lastSeenAt: ctx.now() } });
+          invoiceNumber = invoiceNumberFor(branch.code, c.code, c.nextInvoiceNumber - 1);
         }
-
-        const created = await tx.order.create({
-          data: {
-            id: body.id,
-            accountId: account.id,
-            branchId: branch.id,
-            counterId: counter.id,
-            cashierId: a.user.id,
-            invoiceNumber,
-            customerId: customer?.id ?? null,
-            customerName: customer?.name ?? "",
-            customerPhone: customer?.phone ?? "",
-            customerGstin: customer?.gstin ?? null,
-            placeOfSupply: pos.placeOfSupply,
-            interState: pos.interState,
-            taxEnabled: account.taxEnabled,
-            discountType: discount.type,
-            discountValue: discount.value,
-            subtotal: bill.subtotal,
-            discountTotal: bill.discountTotal,
-            taxableTotal: bill.taxableTotal,
-            cgstTotal: bill.cgstTotal,
-            sgstTotal: bill.sgstTotal,
-            igstTotal: bill.igstTotal,
-            total: bill.total,
-            note: body.note ?? "",
-            createdAt: ctx.now(),
-            items: {
-              create: bill.lines.map((l, i) => {
-                const p = byId.get(body.lines[i]!.productId)!;
-                return {
-                  productId: p.id,
-                  position: i,
-                  name: p.name,
-                  hsn: p.hsn,
-                  unit: p.unit,
-                  qtyMilli: l.qtyMilli,
-                  unitPrice: l.unitPrice,
-                  gstRateBp: l.gstRateBp,
-                  taxInclusive: l.taxInclusive,
-                  gross: l.gross,
-                  discount: l.discount,
-                  taxable: l.taxable,
-                  cgst: l.cgst,
-                  sgst: l.sgst,
-                  igst: l.igst,
-                  total: l.total,
-                  unitCost: p.costPrice,
-                };
-              }),
-            },
-            payments: {
-              create: body.payments.map((p) => {
-                const m = methodById.get(p.methodId)!;
-                return { methodId: m.id, methodName: m.name, kind: m.kind, amount: p.amount };
-              }),
-            },
-          },
-          include: orderInclude,
+        return persistOrder(tx, {
+          id: body.id,
+          account,
+          branch,
+          counterId: counter.id,
+          cashierId: a.user.id,
+          invoiceNumber,
+          customer,
+          placeOfSupply: pos.placeOfSupply,
+          interState: pos.interState,
+          taxEnabled: account.taxEnabled,
+          discount,
+          bill,
+          lines: body.lines.map((l) => {
+            const p = byId.get(l.productId)!;
+            return { productId: p.id, name: p.name, hsn: p.hsn, unit: p.unit, costPrice: p.costPrice, trackStock: p.trackStock, batchId: l.batchId };
+          }),
+          payments: body.payments.map((p) => {
+            const m = methodById.get(p.methodId)!;
+            return { methodId: m.id, methodName: m.name, kind: m.kind, amount: p.amount };
+          }),
+          note: body.note ?? "",
+          createdAt: ctx.now(),
+          blockBelowZero: !account.allowNegativeStock,
         });
-
-        for (const [productId, qty] of need) {
-          if (account.allowNegativeStock) {
-            await moveStock(tx, { accountId: account.id, branchId: branch.id, productId, change: -qty, type: "SALE", refId: created.id, userId: a.user.id });
-          } else {
-            // Stock was already taken above; just log it.
-            const after = (await tx.branchProduct.findUniqueOrThrow({ where: { branchId_productId: { branchId: branch.id, productId } } })).stockMilli;
-            await tx.inventoryLog.create({ data: { accountId: account.id, branchId: branch.id, productId, type: "SALE", changeMilli: -qty, stockAfterMilli: after, refId: created.id, userId: a.user.id } });
-          }
-        }
-        if (account.batchTracking) {
-          for (const item of created.items) {
-            const line = body.lines[item.position]!;
-            const p = byId.get(line.productId)!;
-            if (!p.trackStock) continue;
-            const { allocations, shortfall } = await takeFromBatches(tx, { branchId: branch.id, productId: p.id, qtyMilli: item.qtyMilli, preferredBatchId: line.batchId, fallbackCost: p.costPrice });
-            if (allocations.length) {
-              await tx.orderItemBatch.createMany({ data: allocations.map((x) => ({ orderItemId: item.id, batchId: x.batchId, qtyMilli: x.qtyMilli, unitCost: x.unitCost })) });
-              await tx.orderItem.update({ where: { id: item.id }, data: { unitCost: blendedUnitCost(allocations, shortfall, p.costPrice) } });
-            }
-          }
-          return tx.order.findUniqueOrThrow({ where: { id: created.id }, include: orderInclude });
-        }
-        return created;
       });
     } catch (err) {
+      if (isUniqueViolation(err, "invoiceNumber")) throw new AppError(409, "invoice_number_used", "That bill number is already used. Reload billing.");
       if (isUniqueViolation(err, "id") || isUniqueViolation(err, "PRIMARY") || isUniqueViolation(err, "orders_pkey")) {
         const again = await ctx.prisma.order.findUnique({ where: { id: body.id }, include: orderInclude });
         if (again && again.accountId === account.id) return res.status(200).json({ order: await withCashier(ctx, again), replayed: true });
@@ -303,7 +235,7 @@ export function ordersRouter(ctx: Ctx): Router {
       where,
       orderBy: { createdAt: "desc" },
       take,
-      select: { id: true, invoiceNumber: true, status: true, createdAt: true, branchId: true, customerName: true, total: true, returnedTotal: true, cashierId: true, payments: { select: { methodName: true } } },
+      select: { id: true, invoiceNumber: true, status: true, createdAt: true, branchId: true, customerName: true, total: true, returnedTotal: true, cashierId: true, offline: true, priceDiffers: true, payments: { select: { methodName: true } } },
     });
     res.json({
       orders: rows.map((o) => ({
@@ -316,6 +248,8 @@ export function ordersRouter(ctx: Ctx): Router {
         total: o.total,
         returnedTotal: o.returnedTotal,
         cashierId: o.cashierId,
+        offline: o.offline,
+        priceDiffers: o.priceDiffers,
         paymentMethods: [...new Set(o.payments.map((p) => p.methodName))],
       })),
     });

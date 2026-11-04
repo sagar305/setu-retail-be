@@ -208,6 +208,11 @@ model User {
   failedLogins    Int        @default(0)
   lockedUntil     DateTime?  @db.Timestamptz(3)
   lastLoginAt     DateTime?  @db.Timestamptz(3)
+  /// Counter PIN for offline sign-in: PBKDF2-SHA256 verifier (hex), its salt and rounds.
+  /// Sent to this user's branch counters so they can check the PIN with no internet.
+  pinHash         String?
+  pinSalt         String?
+  pinIterations   Int?
   createdAt       DateTime   @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime   @updatedAt @db.Timestamptz(3)
 
@@ -454,6 +459,8 @@ model Counter {
   nextInvoiceNumber    Int       @default(1)
   nextCreditNoteNumber Int       @default(1)
   lastSeenAt           DateTime? @db.Timestamptz(3)
+  /// SHA-256 of the device key that lets this counter sync offline bills.
+  deviceKeyHash        String?
   createdAt            DateTime  @default(now()) @db.Timestamptz(3)
 
   branch Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
@@ -501,6 +508,11 @@ model Order {
   cancelledAt   DateTime?   @db.Timestamptz(3)
   cancelledById String?     @db.Uuid
   cancelReason  String      @default("")
+  /// Made on a counter without internet and synced later.
+  offline       Boolean     @default(false)
+  /// An offline bill whose prices differ from the branch price when it synced.
+  priceDiffers  Boolean     @default(false)
+  syncedAt      DateTime?   @db.Timestamptz(3)
   createdAt     DateTime    @default(now()) @db.Timestamptz(3)
 
   account     Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)

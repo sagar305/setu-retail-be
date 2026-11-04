@@ -84,7 +84,9 @@ export async function reconcileBatches(db: Db, args: { accountId: string; branch
 
 /** Put `qtyMilli` of a bill line back into the batches it came from. Returns what couldn't be placed. */
 export async function restoreToBatches(db: Db, orderItemId: string, qtyMilli: number): Promise<number> {
-  const allocations = await db.orderItemBatch.findMany({ where: { orderItemId }, orderBy: { id: "asc" } });
+  // Back into the batches in the order the sale took them: earliest expiry first.
+  const rows = await db.orderItemBatch.findMany({ where: { orderItemId }, include: { batch: { select: { expiry: true, receivedAt: true } } } });
+  const allocations = sortFefo(rows.map((r) => ({ ...r, expiry: r.batch.expiry, receivedAt: r.batch.receivedAt })));
   let left = qtyMilli;
   for (const a of allocations) {
     if (left <= 0) break;

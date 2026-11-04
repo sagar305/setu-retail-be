@@ -20,6 +20,7 @@ import { ordersRouter } from "./routes/orders.js";
 import { settingsRouter } from "./routes/settings.js";
 import { reportsRouter } from "./routes/reports.js";
 import { importsRouter } from "./routes/imports.js";
+import { syncRouter } from "./routes/sync.js";
 import { VERSION } from "./version.js";
 
 export type AppDeps = {
@@ -53,6 +54,7 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
 
   // Imports (CSV rows, free POS backups) can be large; everything else stays small.
   app.use("/imports", express.json({ limit: "15mb" }));
+  app.use("/sync", express.json({ limit: "5mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
   app.use(pinoHttp({ level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL }));
@@ -76,8 +78,9 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(ordersRouter(ctx));
     app.use(reportsRouter(ctx));
     app.use(importsRouter(ctx));
+    app.use(syncRouter(ctx));
   } else {
-    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports"], (_req, _res, next) =>
+    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }

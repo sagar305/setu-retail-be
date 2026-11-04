@@ -87,6 +87,8 @@ export const OrderBody = z.object({
   discount: DiscountBody.optional(),
   payments: z.array(z.object({ methodId: z.uuid(), amount: Paise })).min(1).max(5),
   note: Text(300).optional(),
+  /** The counter's own number for this bill (B1-C2-00045). */
+  invoiceNumber: z.string().regex(/^B\d+-C\d+-\d{5,9}$/).optional(),
 });
 
 export const CancelBody = z.object({ reason: Text(300).min(1, "Give a reason.") });
@@ -192,6 +194,8 @@ export const OrderDto = z.object({
   note: z.string(),
   cancelledAt: Iso.nullable(),
   cancelReason: z.string(),
+  offline: z.boolean(),
+  priceDiffers: z.boolean(),
   items: z.array(
     z.object({
       id: z.uuid(),
@@ -237,6 +241,8 @@ export const OrderSummaryDto = z.object({
   total: z.number().int(),
   returnedTotal: z.number().int(),
   cashierId: z.uuid(),
+  offline: z.boolean(),
+  priceDiffers: z.boolean(),
   paymentMethods: z.array(z.string()),
 });
 export const HeldCartDto = z.object({ id: z.uuid(), label: z.string(), payload: HeldCartBody.shape.payload, userId: z.uuid(), createdAt: Iso });

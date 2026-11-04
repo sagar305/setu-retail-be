@@ -3,6 +3,7 @@ import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-ope
 import { z, type ZodType } from "zod";
 import * as S from "./schemas.js";
 import * as P from "./schemas2.js";
+import { PinBody, SyncCustomer, SyncCustomersBody, SyncOrder, SyncOrdersBody } from "./routes/sync.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
@@ -212,6 +213,45 @@ route("get", "/reports/stock-log", `Stock movements in a branch ${Range}`, { tag
 route("post", "/imports/products", "Import products (CSV rows); matches SKU, barcode, then name", { tag: "imports", body: ProductImportBody, ok: ImportResult });
 route("post", "/imports/customers", "Import customers (CSV rows); matches mobile, then name", { tag: "imports", body: CustomerImportBody, ok: ImportResult });
 route("post", "/imports/free-pos", "Import a free Browser POS backup (POS_BACKUP.json) into a branch (owner)", { tag: "imports", body: FreePosImportBody, ok: z.object({ products: ImportResult, customers: ImportResult, categories: z.number().int(), paymentMethodsAdded: z.number().int(), batches: z.number().int(), skipped: z.object({ orders: z.number().int() }) }) });
+
+// ── Phase 3: offline ──
+const device = registry.registerComponent("securitySchemes", "deviceKey", { type: "apiKey", in: "header", name: "X-Device-Key" });
+registry.register("SyncOrder", SyncOrder);
+registry.register("SyncCustomer", SyncCustomer);
+const SyncResults = registry.register("SyncResults", z.object({ results: z.array(z.object({ id: z.string(), status: z.enum(["saved", "duplicate", "rejected", "retry"]), invoiceNumber: z.string().optional(), message: z.string().optional() })) }));
+const OfflinePack = registry.register("OfflinePack", z.object({
+  at: z.string(),
+  settings: Settings,
+  account: z.object({ id: z.string(), name: z.string(), timezone: z.string(), currency: z.string() }),
+  branch: z.object({ id: z.string(), code: z.string(), name: z.string(), address: z.string(), phone: z.string(), gstin: z.string().nullable(), stateCode: z.string().nullable() }),
+  counter: z.object({ id: z.string(), code: z.string(), name: z.string(), nextInvoiceNumber: z.number().int() }),
+  plan: z.object({ expired: z.boolean() }),
+  methods: z.array(PaymentMethod),
+  categories: z.array(Category),
+  products: z.array(Product),
+  batches: z.array(Batch),
+  customers: z.array(Customer),
+  users: z.array(z.object({ id: z.string(), name: z.string(), username: z.string(), role: S.RoleEnum, pin: z.object({ hash: z.string(), salt: z.string(), iterations: z.number().int() }) })),
+}));
+route("get", "/me/pin", "Has the signed-in user set a counter PIN?", { tag: "offline", ok: z.object({ pinSet: z.boolean() }) });
+route("put", "/me/pin", "Set the counter PIN for offline sign-in (needs the password)", { tag: "offline", body: PinBody, ok: z.object({ pinSet: z.literal(true) }) });
+route("delete", "/me/pin", "Remove the counter PIN", { tag: "offline", ok: null, status: 204 });
+route("post", "/counters/{id}/device-key", "Give this device a new counter key (replaces the old one)", { tag: "offline", ok: z.object({ deviceKey: z.string() }) });
+for (const [method, path, summary, body, ok] of [
+  ["get", "/sync/pack", "Everything a counter needs to bill offline (X-Device-Key)", undefined, OfflinePack],
+  ["post", "/sync/customers", "Push customers added offline (X-Device-Key)", SyncCustomersBody, SyncResults],
+  ["post", "/sync/orders", "Push bills made offline; saved as charged; 402 while the plan has ended (X-Device-Key)", SyncOrdersBody, SyncResults],
+] as const) {
+  registry.registerPath({
+    method,
+    path,
+    summary,
+    tags: ["offline"],
+    security: [{ [device.name]: [] }],
+    request: body ? { body: { content: { "application/json": { schema: body } } } } : undefined,
+    responses: { 200: { description: "OK", ...json(ok) }, ...errors, 402: { description: "Plan ended", ...json(ErrorResponse) } },
+  });
+}
 
 export function buildOpenApiDocument(version: string) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
