@@ -2,7 +2,7 @@
   "name": "setu-retail-be",
   "version": "0.1.0",
   "private": true,
-  "description": "Setu Retail cloud POS — API",
+  "description": "Setu Retail cloud POS \u2014 API",
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -19,7 +19,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx prisma/seed.ts",
-    "vercel-build": "prisma generate && prisma migrate deploy"
+    "vercel-build": "prisma generate && prisma migrate deploy",
+    "openapi:export": "tsx scripts/export-openapi.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",

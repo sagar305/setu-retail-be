@@ -35,6 +35,8 @@ jobs:
       - run: npx prisma generate
       - run: npm run lint
       - run: npm run typecheck
+      - name: openapi.json is up to date (the frontend generates its types from it)
+        run: npm run openapi:export && git diff --exit-code openapi.json
       - name: Create the test database
         run: PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE setu_retail_test"
       - run: npm test
