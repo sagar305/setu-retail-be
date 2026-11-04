@@ -132,6 +132,10 @@ model Account {
   batchTracking        Boolean  @default(false)
   /// Connected tools the owner switched off (slugs); everything else is on.
   disabledTools        String[] @default([])
+  /// Udhaar is due this many days after the bill (Invoice Aging); 0 = on the bill date.
+  creditDays           Int      @default(0)
+  /// Shop logo for receipts (PNG/JPEG data URL, small).
+  logoDataUrl          String?
   createdAt            DateTime @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 
@@ -151,22 +155,24 @@ model Account {
 }
 
 model Branch {
-  id         String    @id @default(uuid()) @db.Uuid
-  accountId  String    @db.Uuid
-  number     Int
+  id                String    @id @default(uuid()) @db.Uuid
+  accountId         String    @db.Uuid
+  number            Int
   /// "B" + number; used in invoice numbers (B1-C2-00045).
-  code       String
-  name       String
-  address    String    @default("")
-  phone      String    @default("")
-  gstin      String?
+  code              String
+  name              String
+  address           String    @default("")
+  phone             String    @default("")
+  gstin             String?
   /// Two-digit GST state code, e.g. "29" for Karnataka.
-  stateCode  String?
+  stateCode         String?
   /// False when the plan allows fewer branches: kept, but read-only.
-  withinPlan Boolean   @default(true)
-  archivedAt DateTime? @db.Timestamptz(3)
-  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  withinPlan        Boolean   @default(true)
+  archivedAt        DateTime? @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
+  /// This branch's receipt design; null = the business default.
+  receiptTemplateId String?   @db.Uuid
 
   account  Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   users    UserBranch[]
@@ -422,6 +428,8 @@ model Customer {
   /// GST state code for place of supply, e.g. "27".
   stateCode  String?
   notes      String    @default("")
+  /// Overrides the shop's credit days for this customer.
+  creditDays Int?
   archivedAt DateTime? @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
@@ -981,4 +989,32 @@ model SupplierLedgerEntry {
   @@index([accountId, supplierId, occurredAt])
   @@index([branchId, occurredAt])
   @@map("supplier_ledger_entries")
+}
+
+// ─────────────────────────── Phase 4b: receipt designs ───────────────────────────
+model ReceiptTemplate {
+  id               String    @id @default(uuid()) @db.Uuid
+  accountId        String    @db.Uuid
+  name             String
+  /// "80mm" | "58mm" | "a4"
+  paperSize        String    @default("80mm")
+  accentColor      String    @default("#26306B")
+  headerText       String    @default("")
+  footerText       String    @default("")
+  showLogo         Boolean   @default(false)
+  showBusinessInfo Boolean   @default(true)
+  showGstin        Boolean   @default(true)
+  showHsn          Boolean   @default(true)
+  showGstSummary   Boolean   @default(true)
+  showAmountWords  Boolean   @default(true)
+  boldTotals       Boolean   @default(true)
+  /// "dashed" | "solid" | "none"
+  separator        String    @default("dashed")
+  isDefault        Boolean   @default(false)
+  archivedAt       DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @db.Timestamptz(3)
+
+  @@index([accountId])
+  @@map("receipt_templates")
 }

@@ -1,6 +1,6 @@
 // Shared vectors: the same cases run in setu-retail-fe/src/lib/books.test.ts.
 import { describe, expect, it } from "vitest";
-import { computePurchase, settleOldestFirst } from "../src/lib/books.js";
+import { addDaysTo, agingBucket, computePurchase, daysBetween, settleOldestFirst } from "../src/lib/books.js";
 
 describe("computePurchase", () => {
   it("adds GST on top of the cost and splits it within the state", () => {
@@ -41,5 +41,24 @@ describe("settleOldestFirst", () => {
   it("keeps overpayment as an advance", () => {
     expect(settleOldestFirst(dues, 12_000)).toMatchObject({ open: 0, advance: 2_000 });
     expect(settleOldestFirst([], 500)).toMatchObject({ open: 0, advance: 500 });
+  });
+});
+
+describe("agingBucket", () => {
+  it("counts days overdue from the due day", () => {
+    const today = "2026-11-04";
+    expect(["2026-11-04", "2026-11-10", "2026-11-03", "2026-10-05", "2026-10-04", "2026-09-05", "2026-08-06", "2026-08-05", "2025-01-01"].map((d) => agingBucket(d, today))).toEqual([
+      { bucket: "current", daysOverdue: 0 },
+      { bucket: "current", daysOverdue: 0 },
+      { bucket: "d30", daysOverdue: 1 },
+      { bucket: "d30", daysOverdue: 30 },
+      { bucket: "d60", daysOverdue: 31 },
+      { bucket: "d60", daysOverdue: 60 },
+      { bucket: "d90", daysOverdue: 90 },
+      { bucket: "d90plus", daysOverdue: 91 },
+      { bucket: "d90plus", daysOverdue: 672 },
+    ]);
+    expect(addDaysTo("2026-10-20", 15)).toBe("2026-11-04");
+    expect(daysBetween("2026-02-27", "2026-03-01")).toBe(2);
   });
 });

@@ -60,3 +60,29 @@ export function settleOldestFirst(dues: Due[], credits: number): { dues: OpenDue
   });
   return { dues: out, open: out.reduce((s, d) => s + d.open, 0), advance: left };
 }
+
+// ── Aging ──
+export type AgingBucket = "current" | "d30" | "d60" | "d90" | "d90plus";
+export const AGING_BUCKETS: { key: AgingBucket; label: string }[] = [
+  { key: "current", label: "Not due" },
+  { key: "d30", label: "1–30 days" },
+  { key: "d60", label: "31–60 days" },
+  { key: "d90", label: "61–90 days" },
+  { key: "d90plus", label: "90+ days" },
+];
+
+/** Whole days from one "yyyy-mm-dd" to another. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+export function addDaysTo(day: string, n: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+}
+
+/** How overdue something due on `dueDay` is on `today`. Due today = not due yet. */
+export function agingBucket(dueDay: string, today: string): { bucket: AgingBucket; daysOverdue: number } {
+  const d = daysBetween(dueDay, today);
+  const bucket: AgingBucket = d <= 0 ? "current" : d <= 30 ? "d30" : d <= 60 ? "d60" : d <= 90 ? "d90" : "d90plus";
+  return { bucket, daysOverdue: Math.max(0, d) };
+}

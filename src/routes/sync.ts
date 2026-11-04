@@ -26,6 +26,7 @@ import { batchDto, productDto, shopToday } from "./catalogue.js";
 import { sortFefo, toDay } from "../services/batches.js";
 import { customerBalances, supplierBalances, toolOn } from "../services/books.js";
 import { DEFAULT_EXPENSE_CATEGORIES, moneyMethod } from "./books.js";
+import { templateDto } from "./receipts.js";
 
 const Paise = z.number().int().min(0).max(1_000_000_000);
 export const PinBody = z.object({ pin: z.string().regex(PIN_PATTERN, "4 to 6 digits."), password: z.string().min(1) });
@@ -117,7 +118,7 @@ export function syncRouter(ctx: Ctx): Router {
   // ── Offline pack ──
   router.get("/sync/pack", deviceAuth(ctx), async (req, res) => {
     const { counter, branch, account, plan } = device(req);
-    const [methods, categories, products, customers, users, batches, balances, suppliers, usedCategories] = await Promise.all([
+    const [methods, categories, products, customers, users, batches, balances, suppliers, usedCategories, templates] = await Promise.all([
       ctx.prisma.paymentMethod.findMany({ where: { accountId: account.id, active: true }, orderBy: [{ sort: "asc" }, { createdAt: "asc" }] }),
       ctx.prisma.category.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { name: "asc" } }),
       ctx.prisma.product.findMany({ where: { accountId: account.id, archivedAt: null }, include: { branches: { where: { branchId: branch.id } } }, orderBy: { name: "asc" } }),
@@ -136,6 +137,7 @@ export function syncRouter(ctx: Ctx): Router {
       toolOn(account, "customer-ledger") ? customerBalances(ctx.prisma, account.id) : Promise.resolve(new Map<string, number>()),
       toolOn(account, "supplier-ledger") || toolOn(account, "expense-tracker") ? ctx.prisma.supplier.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { name: "asc" }, take: 2000 }) : Promise.resolve([]),
       toolOn(account, "expense-tracker") ? ctx.prisma.expense.groupBy({ by: ["category"], where: { accountId: account.id, deletedAt: null } }) : Promise.resolve([]),
+      toolOn(account, "receipt-designer") ? ctx.prisma.receiptTemplate.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
     ]);
     const supplierOwed = suppliers.length ? await supplierBalances(ctx.prisma, account.id, suppliers.map((x) => x.id)) : new Map<string, number>();
     const expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
@@ -148,7 +150,7 @@ export function syncRouter(ctx: Ctx): Router {
       at: ctx.now().toISOString(),
       settings: settingsDto(account),
       account: { id: account.id, name: account.name, timezone: account.timezone, currency: account.currency },
-      branch: { id: branch.id, code: branch.code, name: branch.name, address: branch.address, phone: branch.phone, gstin: branch.gstin, stateCode: branch.stateCode },
+      branch: { id: branch.id, code: branch.code, name: branch.name, address: branch.address, phone: branch.phone, gstin: branch.gstin, stateCode: branch.stateCode, receiptTemplateId: branch.receiptTemplateId },
       counter: { id: counter.id, code: counter.code, name: counter.name, nextInvoiceNumber: counter.nextInvoiceNumber },
       plan: { expired: plan.expired },
       methods: methods.map(({ id, name, kind, active, sort }) => ({ id, name, kind, active, sort })),
@@ -162,6 +164,7 @@ export function syncRouter(ctx: Ctx): Router {
       customerBalances: [...balances].map(([customerId, balance]) => ({ customerId, balance })),
       suppliers: suppliers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, balance: supplierOwed.get(x.id) ?? 0 })),
       expenseCategories,
+      receiptTemplates: templates.map(templateDto),
     });
   });
 

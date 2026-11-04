@@ -19,6 +19,8 @@ export const settingsDto = (a: Account) => ({
   receiptPaperSize: a.receiptPaperSize as "80mm" | "58mm" | "a4",
   batchTracking: a.batchTracking,
   tools: toolsDto(a),
+  creditDays: a.creditDays,
+  logoDataUrl: a.logoDataUrl,
 });
 
 export const DEFAULT_PAYMENT_METHODS = [
@@ -46,7 +48,7 @@ export function settingsRouter(ctx: Ctx): Router {
       if (body.batchTracking && !a.account.batchTracking) await startBatchTracking(tx, a.account.id, ctx.now());
       return updated;
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "settings.updated", entityType: "account", entityId: a.account.id, data: { ...body, ...(tools ? { tools } : {}) } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "settings.updated", entityType: "account", entityId: a.account.id, data: { ...body, logoDataUrl: body.logoDataUrl === undefined ? undefined : body.logoDataUrl ? "(image)" : null, ...(tools ? { tools } : {}) } });
     res.json(settingsDto(account));
   });
 

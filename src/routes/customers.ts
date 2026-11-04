@@ -16,6 +16,7 @@ export const customerDto = (c: Customer) => ({
   gstin: c.gstin,
   stateCode: c.stateCode,
   notes: c.notes,
+  creditDays: c.creditDays,
   createdAt: c.createdAt.toISOString(),
 });
 

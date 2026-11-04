@@ -177,6 +177,12 @@
                 "withinPlan": {
                   "type": "boolean"
                 },
+                "receiptTemplateId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
@@ -191,6 +197,7 @@
                 "gstin",
                 "stateCode",
                 "withinPlan",
+                "receiptTemplateId",
                 "createdAt"
               ]
             }
@@ -436,6 +443,12 @@
                     "withinPlan": {
                       "type": "boolean"
                     },
+                    "receiptTemplateId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -450,6 +463,7 @@
                     "gstin",
                     "stateCode",
                     "withinPlan",
+                    "receiptTemplateId",
                     "createdAt"
                   ]
                 }
@@ -627,6 +641,12 @@
           "withinPlan": {
             "type": "boolean"
           },
+          "receiptTemplateId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -641,6 +661,7 @@
           "gstin",
           "stateCode",
           "withinPlan",
+          "receiptTemplateId",
           "createdAt"
         ]
       },
@@ -896,6 +917,15 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "creditDays": {
+            "type": "integer"
+          },
+          "logoDataUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -906,7 +936,9 @@
           "receiptFooter",
           "receiptPaperSize",
           "batchTracking",
-          "tools"
+          "tools",
+          "creditDays",
+          "logoDataUrl"
         ]
       },
       "PaymentMethod": {
@@ -1131,6 +1163,12 @@
           "notes": {
             "type": "string"
           },
+          "creditDays": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -1145,6 +1183,7 @@
           "gstin",
           "stateCode",
           "notes",
+          "creditDays",
           "createdAt"
         ]
       },
@@ -3401,6 +3440,12 @@
                   "string",
                   "null"
                 ]
+              },
+              "receiptTemplateId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             },
             "required": [
@@ -3410,7 +3455,8 @@
               "address",
               "phone",
               "gstin",
-              "stateCode"
+              "stateCode",
+              "receiptTemplateId"
             ]
           },
           "counter": {
@@ -3577,6 +3623,86 @@
             "items": {
               "type": "string"
             }
+          },
+          "receiptTemplates": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "paperSize": {
+                  "type": "string",
+                  "enum": [
+                    "80mm",
+                    "58mm",
+                    "a4"
+                  ]
+                },
+                "accentColor": {
+                  "type": "string"
+                },
+                "headerText": {
+                  "type": "string"
+                },
+                "footerText": {
+                  "type": "string"
+                },
+                "showLogo": {
+                  "type": "boolean"
+                },
+                "showBusinessInfo": {
+                  "type": "boolean"
+                },
+                "showGstin": {
+                  "type": "boolean"
+                },
+                "showHsn": {
+                  "type": "boolean"
+                },
+                "showGstSummary": {
+                  "type": "boolean"
+                },
+                "showAmountWords": {
+                  "type": "boolean"
+                },
+                "boldTotals": {
+                  "type": "boolean"
+                },
+                "separator": {
+                  "type": "string",
+                  "enum": [
+                    "dashed",
+                    "solid",
+                    "none"
+                  ]
+                },
+                "isDefault": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "paperSize",
+                "accentColor",
+                "headerText",
+                "footerText",
+                "showLogo",
+                "showBusinessInfo",
+                "showGstin",
+                "showHsn",
+                "showGstSummary",
+                "showAmountWords",
+                "boldTotals",
+                "separator",
+                "isDefault"
+              ]
+            }
           }
         },
         "required": [
@@ -3594,7 +3720,8 @@
           "users",
           "customerBalances",
           "suppliers",
-          "expenseCategories"
+          "expenseCategories",
+          "receiptTemplates"
         ]
       },
       "SyncMoneyOp": {
@@ -4636,6 +4763,780 @@
           "billDate",
           "lines",
           "paidAmount"
+        ]
+      },
+      "CustomerAging": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ]
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "current": {
+                "type": "integer"
+              },
+              "d30": {
+                "type": "integer"
+              },
+              "d60": {
+                "type": "integer"
+              },
+              "d90": {
+                "type": "integer"
+              },
+              "d90plus": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "current",
+              "d30",
+              "d60",
+              "d90",
+              "d90plus"
+            ]
+          },
+          "total": {
+            "type": "integer"
+          },
+          "creditDays": {
+            "type": "integer"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "customerId": {
+                  "type": "string"
+                },
+                "creditDays": {
+                  "type": "integer"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "open": {
+                  "type": "integer"
+                },
+                "buckets": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "integer"
+                    },
+                    "d30": {
+                      "type": "integer"
+                    },
+                    "d60": {
+                      "type": "integer"
+                    },
+                    "d90": {
+                      "type": "integer"
+                    },
+                    "d90plus": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "d30",
+                    "d60",
+                    "d90",
+                    "d90plus"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "amount": {
+                        "type": "integer"
+                      },
+                      "paid": {
+                        "type": "integer"
+                      },
+                      "open": {
+                        "type": "integer"
+                      },
+                      "dueDay": {
+                        "type": "string"
+                      },
+                      "bucket": {
+                        "type": "string",
+                        "enum": [
+                          "current",
+                          "d30",
+                          "d60",
+                          "d90",
+                          "d90plus"
+                        ]
+                      },
+                      "daysOverdue": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type",
+                      "ref",
+                      "at",
+                      "dueDate",
+                      "amount",
+                      "paid",
+                      "open",
+                      "dueDay",
+                      "bucket",
+                      "daysOverdue"
+                    ]
+                  }
+                },
+                "maxDaysOverdue": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "customerId",
+                "creditDays",
+                "name",
+                "phone",
+                "open",
+                "buckets",
+                "items",
+                "maxDaysOverdue"
+              ]
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "buckets",
+          "totals",
+          "total",
+          "creditDays",
+          "parties"
+        ]
+      },
+      "SupplierAging": {
+        "type": "object",
+        "properties": {
+          "asOf": {
+            "type": "string"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ]
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "current": {
+                "type": "integer"
+              },
+              "d30": {
+                "type": "integer"
+              },
+              "d60": {
+                "type": "integer"
+              },
+              "d90": {
+                "type": "integer"
+              },
+              "d90plus": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "current",
+              "d30",
+              "d60",
+              "d90",
+              "d90plus"
+            ]
+          },
+          "total": {
+            "type": "integer"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "supplierId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "phone": {
+                  "type": "string"
+                },
+                "open": {
+                  "type": "integer"
+                },
+                "buckets": {
+                  "type": "object",
+                  "properties": {
+                    "current": {
+                      "type": "integer"
+                    },
+                    "d30": {
+                      "type": "integer"
+                    },
+                    "d60": {
+                      "type": "integer"
+                    },
+                    "d90": {
+                      "type": "integer"
+                    },
+                    "d90plus": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "current",
+                    "d30",
+                    "d60",
+                    "d90",
+                    "d90plus"
+                  ]
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "ref": {
+                        "type": "string"
+                      },
+                      "at": {
+                        "type": "string"
+                      },
+                      "dueDate": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "amount": {
+                        "type": "integer"
+                      },
+                      "paid": {
+                        "type": "integer"
+                      },
+                      "open": {
+                        "type": "integer"
+                      },
+                      "dueDay": {
+                        "type": "string"
+                      },
+                      "bucket": {
+                        "type": "string",
+                        "enum": [
+                          "current",
+                          "d30",
+                          "d60",
+                          "d90",
+                          "d90plus"
+                        ]
+                      },
+                      "daysOverdue": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "type",
+                      "ref",
+                      "at",
+                      "dueDate",
+                      "amount",
+                      "paid",
+                      "open",
+                      "dueDay",
+                      "bucket",
+                      "daysOverdue"
+                    ]
+                  }
+                },
+                "maxDaysOverdue": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "supplierId",
+                "name",
+                "phone",
+                "open",
+                "buckets",
+                "items",
+                "maxDaysOverdue"
+              ]
+            }
+          },
+          "dueThisWeek": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "string"
+                },
+                "dueDate": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "amount": {
+                  "type": "integer"
+                },
+                "paid": {
+                  "type": "integer"
+                },
+                "open": {
+                  "type": "integer"
+                },
+                "dueDay": {
+                  "type": "string"
+                },
+                "bucket": {
+                  "type": "string",
+                  "enum": [
+                    "current",
+                    "d30",
+                    "d60",
+                    "d90",
+                    "d90plus"
+                  ]
+                },
+                "daysOverdue": {
+                  "type": "integer"
+                },
+                "supplierId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type",
+                "ref",
+                "at",
+                "dueDate",
+                "amount",
+                "paid",
+                "open",
+                "dueDay",
+                "bucket",
+                "daysOverdue",
+                "supplierId",
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "asOf",
+          "buckets",
+          "totals",
+          "total",
+          "parties",
+          "dueThisWeek"
+        ]
+      },
+      "ProfitReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "period": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month"
+            ]
+          },
+          "revenue": {
+            "type": "integer"
+          },
+          "cost": {
+            "type": "integer"
+          },
+          "expenses": {
+            "type": "integer"
+          },
+          "grossProfit": {
+            "type": "integer"
+          },
+          "netProfit": {
+            "type": "integer"
+          },
+          "grossMarginBp": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "uncosted": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "integer"
+              },
+              "revenue": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "lines",
+              "revenue"
+            ]
+          },
+          "byPeriod": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "period": {
+                  "type": "string"
+                },
+                "revenue": {
+                  "type": "integer"
+                },
+                "cost": {
+                  "type": "integer"
+                },
+                "expenses": {
+                  "type": "integer"
+                },
+                "grossProfit": {
+                  "type": "integer"
+                },
+                "netProfit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "period",
+                "revenue",
+                "cost",
+                "expenses",
+                "grossProfit",
+                "netProfit"
+              ]
+            }
+          },
+          "byBranch": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "branchId": {
+                  "type": "string"
+                },
+                "revenue": {
+                  "type": "integer"
+                },
+                "cost": {
+                  "type": "integer"
+                },
+                "expenses": {
+                  "type": "integer"
+                },
+                "grossProfit": {
+                  "type": "integer"
+                },
+                "netProfit": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "branchId",
+                "revenue",
+                "cost",
+                "expenses",
+                "grossProfit",
+                "netProfit"
+              ]
+            }
+          },
+          "expensesByCategory": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "category": {
+                  "type": "string"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "category",
+                "amount"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "period",
+          "revenue",
+          "cost",
+          "expenses",
+          "grossProfit",
+          "netProfit",
+          "grossMarginBp",
+          "uncosted",
+          "byPeriod",
+          "byBranch",
+          "expensesByCategory"
+        ]
+      },
+      "StockRegister": {
+        "type": "object",
+        "properties": {
+          "branchId": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "value": {
+            "type": "integer"
+          },
+          "missingCost": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "opening": {
+                  "type": "integer"
+                },
+                "purchases": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                },
+                "returns": {
+                  "type": "integer"
+                },
+                "adjustments": {
+                  "type": "integer"
+                },
+                "supplierReturns": {
+                  "type": "integer"
+                },
+                "closing": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "sku",
+                "unit",
+                "opening",
+                "purchases",
+                "sales",
+                "returns",
+                "adjustments",
+                "supplierReturns",
+                "closing",
+                "value"
+              ]
+            }
+          }
+        },
+        "required": [
+          "branchId",
+          "from",
+          "to",
+          "value",
+          "missingCost",
+          "items"
+        ]
+      },
+      "ReceiptTemplate": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "paperSize": {
+            "type": "string",
+            "enum": [
+              "80mm",
+              "58mm",
+              "a4"
+            ]
+          },
+          "accentColor": {
+            "type": "string"
+          },
+          "headerText": {
+            "type": "string"
+          },
+          "footerText": {
+            "type": "string"
+          },
+          "showLogo": {
+            "type": "boolean"
+          },
+          "showBusinessInfo": {
+            "type": "boolean"
+          },
+          "showGstin": {
+            "type": "boolean"
+          },
+          "showHsn": {
+            "type": "boolean"
+          },
+          "showGstSummary": {
+            "type": "boolean"
+          },
+          "showAmountWords": {
+            "type": "boolean"
+          },
+          "boldTotals": {
+            "type": "boolean"
+          },
+          "separator": {
+            "type": "string",
+            "enum": [
+              "dashed",
+              "solid",
+              "none"
+            ]
+          },
+          "isDefault": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "paperSize",
+          "accentColor",
+          "headerText",
+          "footerText",
+          "showLogo",
+          "showBusinessInfo",
+          "showGstin",
+          "showHsn",
+          "showGstSummary",
+          "showAmountWords",
+          "boldTotals",
+          "separator",
+          "isDefault"
         ]
       }
     },
@@ -6603,6 +7504,19 @@
                         "type": "boolean"
                       }
                     }
+                  },
+                  "creditDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 365
+                  },
+                  "logoDataUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 200000,
+                    "pattern": "^data:image\\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$"
                   }
                 }
               }
@@ -8141,6 +9055,14 @@
                   "notes": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "creditDays": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 365
                   }
                 },
                 "required": [
@@ -8308,6 +9230,14 @@
                   "notes": {
                     "type": "string",
                     "maxLength": 500
+                  },
+                  "creditDays": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 365
                   }
                 }
               }
@@ -9581,7 +10511,7 @@
     },
     "/reports/stock-log": {
       "get": {
-        "summary": "Stock movements in a branch (?from=&to= ISO instants, ?branchId=)",
+        "summary": "Stock movements in a branch (?from=&to= ISO instants, ?branchId=), &productId=",
         "tags": [
           "reports"
         ],
@@ -12759,6 +13689,746 @@
                   },
                   "required": [
                     "purchase"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/aging/customers": {
+      "get": {
+        "summary": "Invoice Aging: udhaar due after credit days, by how overdue",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CustomerAging"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/aging/suppliers": {
+      "get": {
+        "summary": "Payables Aging: unpaid supplier bills by due date",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupplierAging"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/profit": {
+      "get": {
+        "summary": "Profit: net sales before GST − cost of goods − expenses (?from=&to= yyyy-mm-dd, &branchId=)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfitReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/stock-register": {
+      "get": {
+        "summary": "Opening, in, out and closing stock per product in a branch (?branchId=&from=&to=)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockRegister"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receipt-templates": {
+      "get": {
+        "summary": "Saved receipt designs",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "templates": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReceiptTemplate"
+                      }
+                    }
+                  },
+                  "required": [
+                    "templates"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Save a receipt design (the first becomes the default)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "paperSize": {
+                    "type": "string",
+                    "enum": [
+                      "80mm",
+                      "58mm",
+                      "a4"
+                    ]
+                  },
+                  "accentColor": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "headerText": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "footerText": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "showLogo": {
+                    "type": "boolean"
+                  },
+                  "showBusinessInfo": {
+                    "type": "boolean"
+                  },
+                  "showGstin": {
+                    "type": "boolean"
+                  },
+                  "showHsn": {
+                    "type": "boolean"
+                  },
+                  "showGstSummary": {
+                    "type": "boolean"
+                  },
+                  "showAmountWords": {
+                    "type": "boolean"
+                  },
+                  "boldTotals": {
+                    "type": "boolean"
+                  },
+                  "separator": {
+                    "type": "string",
+                    "enum": [
+                      "dashed",
+                      "solid",
+                      "none"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paperSize",
+                  "accentColor"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/ReceiptTemplate"
+                    }
+                  },
+                  "required": [
+                    "template"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receipt-templates/{id}": {
+      "patch": {
+        "summary": "Edit a receipt design",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60
+                  },
+                  "paperSize": {
+                    "type": "string",
+                    "enum": [
+                      "80mm",
+                      "58mm",
+                      "a4"
+                    ]
+                  },
+                  "accentColor": {
+                    "type": "string",
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "headerText": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "footerText": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "showLogo": {
+                    "type": "boolean"
+                  },
+                  "showBusinessInfo": {
+                    "type": "boolean"
+                  },
+                  "showGstin": {
+                    "type": "boolean"
+                  },
+                  "showHsn": {
+                    "type": "boolean"
+                  },
+                  "showGstSummary": {
+                    "type": "boolean"
+                  },
+                  "showAmountWords": {
+                    "type": "boolean"
+                  },
+                  "boldTotals": {
+                    "type": "boolean"
+                  },
+                  "separator": {
+                    "type": "string",
+                    "enum": [
+                      "dashed",
+                      "solid",
+                      "none"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/ReceiptTemplate"
+                    }
+                  },
+                  "required": [
+                    "template"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a receipt design",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receipt-templates/{id}/default": {
+      "post": {
+        "summary": "Make a design the business default",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "template": {
+                      "$ref": "#/components/schemas/ReceiptTemplate"
+                    }
+                  },
+                  "required": [
+                    "template"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/receipt-templates/branches/{branchId}": {
+      "put": {
+        "summary": "Pick a branch's receipt design (null = business default)",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "templateId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
+                  }
+                },
+                "required": [
+                  "templateId"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "branchId": {
+                      "type": "string"
+                    },
+                    "templateId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "branchId",
+                    "templateId"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/barcodes": {
+      "post": {
+        "summary": "Make in-store EAN-13 barcodes for products without one",
+        "tags": [
+          "tools"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "productIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "productIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "generated": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "productId": {
+                            "type": "string"
+                          },
+                          "barcode": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "productId",
+                          "barcode"
+                        ]
+                      }
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "generated",
+                    "skipped"
                   ]
                 }
               }

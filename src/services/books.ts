@@ -127,18 +127,29 @@ function buildStatement(rows: Omit<StatementRow, "balance">[]): Statement {
 
 const day = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
 
-export async function customerStatement(db: Db, accountId: string, customerId: string): Promise<Statement> {
+type Row = Omit<StatementRow, "balance">;
+const group = (rows: (Row & { party: string })[]) => {
+  const m = new Map<string, Row[]>();
+  for (const { party, ...r } of rows) m.set(party, [...(m.get(party) ?? []), r]);
+  return m;
+};
+const emptyStatement = (): Statement => ({ balance: 0, open: 0, advance: 0, rows: [], openItems: [] });
+
+/** Udhaar statements for some customers (or all), in three queries. */
+export async function customerStatements(db: Db, accountId: string, customerIds?: string[]): Promise<Map<string, Statement>> {
+  const only = customerIds ? { in: customerIds } : { not: null };
   const [bills, entries, notes] = await Promise.all([
     db.order.findMany({
-      where: { accountId, customerId, status: "COMPLETED", payments: { some: { kind: "CREDIT" } } },
-      select: { id: true, invoiceNumber: true, createdAt: true, branchId: true, payments: { where: { kind: "CREDIT" }, select: { amount: true } } },
+      where: { accountId, customerId: only, status: "COMPLETED", payments: { some: { kind: "CREDIT" } } },
+      select: { id: true, customerId: true, invoiceNumber: true, createdAt: true, branchId: true, payments: { where: { kind: "CREDIT" }, select: { amount: true } } },
     }),
-    db.customerLedgerEntry.findMany({ where: { accountId, customerId, voidedAt: null } }),
-    db.creditNote.findMany({ where: { accountId, refundKind: "CREDIT", order: { customerId } }, select: { id: true, number: true, createdAt: true, branchId: true, total: true, order: { select: { invoiceNumber: true } } } }),
+    db.customerLedgerEntry.findMany({ where: { accountId, voidedAt: null, ...(customerIds ? { customerId: { in: customerIds } } : {}) } }),
+    db.creditNote.findMany({ where: { accountId, refundKind: "CREDIT", order: { customerId: only } }, select: { id: true, number: true, createdAt: true, branchId: true, total: true, order: { select: { invoiceNumber: true, customerId: true } } } }),
   ]);
-  return buildStatement([
-    ...bills.map((o) => ({ id: o.id, at: o.createdAt.toISOString(), type: "bill", ref: o.invoiceNumber, note: "Udhaar on bill", debit: o.payments.reduce((s, p) => s + p.amount, 0), credit: 0, methodName: "", branchId: o.branchId, voidable: false, dueDate: null })),
+  const byParty = group([
+    ...bills.map((o) => ({ party: o.customerId!, id: o.id, at: o.createdAt.toISOString(), type: "bill", ref: o.invoiceNumber, note: "Udhaar on bill", debit: o.payments.reduce((s, p) => s + p.amount, 0), credit: 0, methodName: "", branchId: o.branchId, voidable: false, dueDate: null })),
     ...entries.map((e) => ({
+      party: e.customerId,
       id: e.id,
       at: e.occurredAt.toISOString(),
       type: e.type.toLowerCase(),
@@ -151,24 +162,32 @@ export async function customerStatement(db: Db, accountId: string, customerId: s
       voidable: true,
       dueDate: null,
     })),
-    ...notes.map((c) => ({ id: c.id, at: c.createdAt.toISOString(), type: "credit_note", ref: c.number, note: `Return on ${c.order.invoiceNumber}`, debit: 0, credit: c.total, methodName: "", branchId: c.branchId, voidable: false, dueDate: null })),
+    ...notes.map((c) => ({ party: c.order.customerId!, id: c.id, at: c.createdAt.toISOString(), type: "credit_note", ref: c.number, note: `Return on ${c.order.invoiceNumber}`, debit: 0, credit: c.total, methodName: "", branchId: c.branchId, voidable: false, dueDate: null })),
   ]);
+  return new Map([...byParty].map(([id, rows]) => [id, buildStatement(rows)]));
 }
 
-export async function supplierStatement(db: Db, accountId: string, supplierId: string): Promise<Statement> {
+export async function customerStatement(db: Db, accountId: string, customerId: string): Promise<Statement> {
+  return (await customerStatements(db, accountId, [customerId])).get(customerId) ?? emptyStatement();
+}
+
+/** Supplier statements for some suppliers (or all), in three queries. */
+export async function supplierStatements(db: Db, accountId: string, supplierIds?: string[]): Promise<Map<string, Statement>> {
+  const only = supplierIds ? { supplierId: { in: supplierIds } } : {};
   const [purchases, entries, returns] = await Promise.all([
-    db.purchase.findMany({ where: { accountId, supplierId, cancelledAt: null } }),
-    db.supplierLedgerEntry.findMany({ where: { accountId, supplierId, voidedAt: null } }),
-    db.purchaseReturn.findMany({ where: { accountId, supplierId, mode: "CREDIT_NOTE", purchase: { cancelledAt: null } }, include: { purchase: { select: { billNumber: true } } } }),
+    db.purchase.findMany({ where: { accountId, cancelledAt: null, ...only } }),
+    db.supplierLedgerEntry.findMany({ where: { accountId, voidedAt: null, ...only } }),
+    db.purchaseReturn.findMany({ where: { accountId, mode: "CREDIT_NOTE", purchase: { cancelledAt: null }, ...only }, include: { purchase: { select: { billNumber: true } } } }),
   ]);
   // A bill is dated by its bill date; what was paid at entry is a payment on that bill.
   const billAt = (p: { billDate: Date; createdAt: Date }) => `${day(p.billDate)}T00:00:00.000Z` < p.createdAt.toISOString() ? `${day(p.billDate)}T00:00:00.000Z` : p.createdAt.toISOString();
-  return buildStatement([
-    ...purchases.map((p) => ({ id: p.id, at: billAt(p), type: "purchase", ref: p.billNumber, note: p.notes, debit: p.total, credit: 0, methodName: "", branchId: p.branchId, voidable: false, dueDate: day(p.dueDate) })),
+  const byParty = group([
+    ...purchases.map((p) => ({ party: p.supplierId, id: p.id, at: billAt(p), type: "purchase", ref: p.billNumber, note: p.notes, debit: p.total, credit: 0, methodName: "", branchId: p.branchId, voidable: false, dueDate: day(p.dueDate) ?? day(p.billDate) })),
     ...purchases
       .filter((p) => p.paidAmount > 0)
-      .map((p) => ({ id: `${p.id}:paid`, at: billAt(p), type: "paid_on_bill", ref: p.billNumber, note: "Paid with the bill", debit: 0, credit: p.paidAmount, methodName: p.paidMethodName, branchId: p.branchId, voidable: false, dueDate: null })),
+      .map((p) => ({ party: p.supplierId, id: `${p.id}:paid`, at: billAt(p), type: "paid_on_bill", ref: p.billNumber, note: "Paid with the bill", debit: 0, credit: p.paidAmount, methodName: p.paidMethodName, branchId: p.branchId, voidable: false, dueDate: null })),
     ...entries.map((e) => ({
+      party: e.supplierId,
       id: e.id,
       at: e.occurredAt.toISOString(),
       type: e.type.toLowerCase(),
@@ -179,10 +198,15 @@ export async function supplierStatement(db: Db, accountId: string, supplierId: s
       methodName: e.methodName,
       branchId: e.branchId,
       voidable: true,
-      dueDate: day(e.dueDate),
+      dueDate: e.type === "PAYMENT" ? null : (day(e.dueDate) ?? e.occurredAt.toISOString().slice(0, 10)),
     })),
-    ...returns.map((r) => ({ id: r.id, at: r.occurredAt.toISOString(), type: "return", ref: r.purchase.billNumber, note: r.note || "Goods returned (credit note)", debit: 0, credit: r.total, methodName: "", branchId: r.branchId, voidable: false, dueDate: null })),
+    ...returns.map((r) => ({ party: r.supplierId, id: r.id, at: r.occurredAt.toISOString(), type: "return", ref: r.purchase.billNumber, note: r.note || "Goods returned (credit note)", debit: 0, credit: r.total, methodName: "", branchId: r.branchId, voidable: false, dueDate: null })),
   ]);
+  return new Map([...byParty].map(([id, rows]) => [id, buildStatement(rows)]));
+}
+
+export async function supplierStatement(db: Db, accountId: string, supplierId: string): Promise<Statement> {
+  return (await supplierStatements(db, accountId, [supplierId])).get(supplierId) ?? emptyStatement();
 }
 
 // ── Cash book (per branch) ──

@@ -1,6 +1,6 @@
-# Setu Retail — Cloud POS (premium) — Build Plan v1.6
+# Setu Retail — Cloud POS (premium) — Build Plan v1.7
 
-Status: Phases 0–3 built. Phase 4a in progress.
+Status: Phases 0–4a built. Phase 4b in progress.
 
 ## 1. Confirmed decisions
 
@@ -39,6 +39,10 @@ Status: Phases 0–3 built. Phase 4a in progress.
 | Cash Book | **Per branch, automatic**: cash sales, cash refunds, cash expenses, cash customer payments and cash supplier payments post on their own, plus manual in/out entries. A day's opening = the previous day's closing; the owner sets the first opening balance |
 | Purchases | Supplier bill adds stock to a branch (batches with expiry when batch tracking is on), updates cost price and records **input GST per line** (CGST/SGST or IGST by supplier state). Paid now, on credit, or part-paid with a due date. Purchase returns: credit note (reduces what you owe) or replacement (pending until the goods come back) |
 | Payments | Customer payments clear the **oldest unpaid udhaar first**; payments to suppliers clear the oldest unpaid bills first. Aging is based on that |
+| Invoice Aging | Udhaar is due after the owner's **credit days** (default 0 = due on the bill date), which can be set per customer. Buckets: not due, 1–30, 31–60, 61–90, 90+ days overdue. Payables Aging uses each bill's due date (else the bill date) |
+| Profit | **Net sales before GST (after returns) − cost of goods sold (batch / cost price at sale) − expenses = net profit**, by branch and by day or month. Sales with no known cost are counted and shown |
+| Barcodes | A4 label sheets for many products, thermal label rolls (50×25 / 38×25 mm), single labels (Code 128 / EAN-13 / QR), and making in-store EAN-13 barcodes (starting with 2) for products without one |
+| Receipt designs | Several saved designs, one default for the business; each branch can choose its own; billing prints with it and the cashier can switch design when printing |
 | Old dues | Shops coming from the free browser POS import their **full history** (ledger, supplier ledger, purchases, expenses, cash book). Others enter an **opening balance** per customer or supplier with a date, counted as the oldest bill |
 
 ### Prices (GST included)

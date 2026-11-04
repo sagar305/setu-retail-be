@@ -17,6 +17,10 @@ export const SettingsPatchBody = z.object({
   batchTracking: z.boolean().optional(),
   /** Connected tools to switch on (true) or off (false); others stay as they are. */
   tools: ToolsPatch.optional(),
+  /** Udhaar is due this many days after the bill (Invoice Aging). */
+  creditDays: z.number().int().min(0).max(365).optional(),
+  /** Shop logo for receipts: a PNG/JPEG/WebP data URL up to ~150 KB, or null to remove. */
+  logoDataUrl: z.string().max(200_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, "Use a PNG, JPEG or WebP image.").nullable().optional(),
 });
 
 export const PaymentMethodBody = z.object({
@@ -75,6 +79,8 @@ export const CustomerBody = z.object({
   gstin: Text(15).optional(),
   stateCode: z.union([z.string().regex(/^\d{2}$/, "Two-digit state code."), z.literal("")]).optional(),
   notes: Text(500).optional(),
+  /** Udhaar due after this many days; null = the shop's setting. */
+  creditDays: z.number().int().min(0).max(365).nullable().optional(),
 });
 export const CustomerPatchBody = CustomerBody.partial();
 
@@ -125,6 +131,8 @@ export const SettingsDto = z.object({
   batchTracking: z.boolean(),
   /** Connected tools: on (true) or switched off by the owner. */
   tools: z.record(z.string(), z.boolean()),
+  creditDays: z.number().int(),
+  logoDataUrl: z.string().nullable(),
 });
 export const PaymentMethodDto = z.object({ id: z.uuid(), name: z.string(), kind: Kind, active: z.boolean(), sort: z.number().int() });
 export const CounterDto = z.object({ id: z.uuid(), branchId: z.uuid(), code: z.string(), name: z.string(), lastSeenAt: Iso.nullable() });
@@ -171,6 +179,7 @@ export const CustomerDto = z.object({
   gstin: z.string().nullable(),
   stateCode: z.string().nullable(),
   notes: z.string(),
+  creditDays: z.number().int().nullable(),
   createdAt: Iso,
 });
 const Amounts = { taxable: z.number().int(), cgst: z.number().int(), sgst: z.number().int(), igst: z.number().int(), total: z.number().int() };

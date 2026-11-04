@@ -84,6 +84,8 @@ export const BranchDto = z.object({
   gstin: z.string().nullable(),
   stateCode: z.string().nullable(),
   withinPlan: z.boolean(),
+  /** This branch's receipt design; null = the business default. */
+  receiptTemplateId: z.string().nullable(),
   createdAt: z.iso.datetime(),
 });
 export const LimitsDto = z.object({

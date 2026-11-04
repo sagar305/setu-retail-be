@@ -23,6 +23,8 @@ import { importsRouter } from "./routes/imports.js";
 import { syncRouter } from "./routes/sync.js";
 import { booksRouter } from "./routes/books.js";
 import { purchasesRouter } from "./routes/purchases.js";
+import { toolReportsRouter } from "./routes/toolReports.js";
+import { receiptsRouter } from "./routes/receipts.js";
 import { VERSION } from "./version.js";
 
 export type AppDeps = {
@@ -75,16 +77,18 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(branchesRouter(ctx));
     app.use(staffRouter(ctx));
     app.use(settingsRouter(ctx));
+    app.use(receiptsRouter(ctx));
     app.use(catalogueRouter(ctx));
     app.use(customersRouter(ctx));
     app.use(ordersRouter(ctx));
     app.use(reportsRouter(ctx));
+    app.use(toolReportsRouter(ctx));
     app.use(importsRouter(ctx));
     app.use(booksRouter(ctx));
     app.use(purchasesRouter(ctx));
     app.use(syncRouter(ctx));
   } else {
-    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns"], (_req, _res, next) =>
+    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }

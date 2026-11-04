@@ -5,6 +5,7 @@ import * as S from "./schemas.js";
 import * as P from "./schemas2.js";
 import { PinBody, SyncCustomer, SyncCustomersBody, SyncMoneyBody, SyncMoneyOp, SyncOrder, SyncOrdersBody } from "./routes/sync.js";
 import * as F from "./schemas4.js";
+import { BarcodeGenerateBody, BranchReceiptBody, ReceiptTemplateBody, ReceiptTemplateDto } from "./routes/receipts.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
@@ -209,7 +210,7 @@ route("get", "/reports/sales", `Sales summary ${Range}`, { tag: "reports", ok: S
 route("get", "/reports/gst", `GST by rate (returns netted), by HSN, B2B/B2C, credit notes ${Range}`, { tag: "reports", ok: GstReport });
 route("get", "/reports/stock", "Stock value, low/out/below zero, expiring batches (?branchId=)", { tag: "reports", ok: StockReport });
 route("get", "/reports/staff", `Sales by cashier and counter; margin by product ${Range}`, { tag: "reports", ok: StaffReport });
-route("get", "/reports/stock-log", `Stock movements in a branch ${Range}`, { tag: "reports", ok: StockLog });
+route("get", "/reports/stock-log", `Stock movements in a branch ${Range}, &productId=`, { tag: "reports", ok: StockLog });
 
 route("post", "/imports/products", "Import products (CSV rows); matches SKU, barcode, then name", { tag: "imports", body: ProductImportBody, ok: ImportResult });
 route("post", "/imports/customers", "Import customers (CSV rows); matches mobile, then name", { tag: "imports", body: CustomerImportBody, ok: ImportResult });
@@ -224,7 +225,7 @@ const OfflinePack = registry.register("OfflinePack", z.object({
   at: z.string(),
   settings: Settings,
   account: z.object({ id: z.string(), name: z.string(), timezone: z.string(), currency: z.string() }),
-  branch: z.object({ id: z.string(), code: z.string(), name: z.string(), address: z.string(), phone: z.string(), gstin: z.string().nullable(), stateCode: z.string().nullable() }),
+  branch: z.object({ id: z.string(), code: z.string(), name: z.string(), address: z.string(), phone: z.string(), gstin: z.string().nullable(), stateCode: z.string().nullable(), receiptTemplateId: z.string().nullable() }),
   counter: z.object({ id: z.string(), code: z.string(), name: z.string(), nextInvoiceNumber: z.number().int() }),
   plan: z.object({ expired: z.boolean() }),
   methods: z.array(PaymentMethod),
@@ -236,6 +237,7 @@ const OfflinePack = registry.register("OfflinePack", z.object({
   customerBalances: z.array(z.object({ customerId: z.string(), balance: z.number().int() })),
   suppliers: z.array(z.object({ id: z.string(), name: z.string(), phone: z.string(), balance: z.number().int() })),
   expenseCategories: z.array(z.string()),
+  receiptTemplates: z.array(ReceiptTemplateDto),
 }));
 registry.register("SyncMoneyOp", SyncMoneyOp);
 route("get", "/me/pin", "Has the signed-in user set a counter PIN?", { tag: "offline", ok: z.object({ pinSet: z.boolean() }) });
@@ -307,6 +309,34 @@ for (const [method, path, summary, body, ok] of [
   route("post", "/purchases/{id}/cancel", "Cancel a supplier bill and take its stock back out", { tag: t, body: F.PurchaseCancelBody, ok: z.object({ purchase: Purchase }) });
   route("post", "/purchases/{id}/returns", "Return goods to the supplier (credit note or replacement)", { tag: t, body: F.PurchaseReturnBody, ok: z.object({ purchase: Purchase }), status: 201 });
   route("post", "/purchase-returns/{id}/receive", "The replacement arrived: stock comes back in", { tag: t, body: F.ReplacementBody, ok: z.object({ purchase: Purchase }) });
+}
+
+// ── Phase 4b: report tools, receipt designs, barcodes ──
+{
+  const M = z.number().int();
+  const t = "tools";
+  const Buckets = z.object({ current: M, d30: M, d60: M, d90: M, d90plus: M });
+  const Aged = z.object({ id: z.string(), type: z.string(), ref: z.string(), at: z.string(), dueDate: z.string().nullable(), amount: M, paid: M, open: M, dueDay: z.string(), bucket: z.enum(["current", "d30", "d60", "d90", "d90plus"]), daysOverdue: z.number().int() });
+  const party = { name: z.string(), phone: z.string(), open: M, buckets: Buckets, items: z.array(Aged), maxDaysOverdue: z.number().int() };
+  const common = { asOf: z.string(), buckets: z.array(z.object({ key: z.string(), label: z.string() })), totals: Buckets, total: M };
+  const CustomerAging = registry.register("CustomerAging", z.object({ ...common, creditDays: z.number().int(), parties: z.array(z.object({ customerId: z.string(), creditDays: z.number().int(), ...party })) }));
+  const SupplierAging = registry.register("SupplierAging", z.object({ ...common, parties: z.array(z.object({ supplierId: z.string(), ...party })), dueThisWeek: z.array(Aged.extend({ supplierId: z.string(), name: z.string() })) }));
+  const P = { revenue: M, cost: M, expenses: M, grossProfit: M, netProfit: M };
+  const Profit = registry.register("ProfitReport", z.object({ from: z.string(), to: z.string(), period: z.enum(["day", "month"]), ...P, grossMarginBp: z.number().int().nullable(), uncosted: z.object({ lines: z.number().int(), revenue: M }), byPeriod: z.array(z.object({ period: z.string(), ...P })), byBranch: z.array(z.object({ branchId: z.string(), ...P })), expensesByCategory: z.array(z.object({ category: z.string(), amount: M })) }));
+  const Q = z.number().int();
+  const StockRegister = registry.register("StockRegister", z.object({ branchId: z.string(), from: z.string(), to: z.string(), value: M, missingCost: z.number().int(), items: z.array(z.object({ productId: z.string(), name: z.string(), sku: z.string(), unit: z.string(), opening: Q, purchases: Q, sales: Q, returns: Q, adjustments: Q, supplierReturns: Q, closing: Q, value: M.nullable() })) }));
+  const Template = registry.register("ReceiptTemplate", ReceiptTemplateDto);
+  route("get", "/reports/aging/customers", "Invoice Aging: udhaar due after credit days, by how overdue", { tag: t, ok: CustomerAging });
+  route("get", "/reports/aging/suppliers", "Payables Aging: unpaid supplier bills by due date", { tag: t, ok: SupplierAging });
+  route("get", "/reports/profit", "Profit: net sales before GST − cost of goods − expenses (?from=&to= yyyy-mm-dd, &branchId=)", { tag: t, ok: Profit });
+  route("get", "/reports/stock-register", "Opening, in, out and closing stock per product in a branch (?branchId=&from=&to=)", { tag: t, ok: StockRegister });
+  route("get", "/receipt-templates", "Saved receipt designs", { tag: t, ok: z.object({ templates: z.array(Template) }) });
+  route("post", "/receipt-templates", "Save a receipt design (the first becomes the default)", { tag: t, body: ReceiptTemplateBody, ok: z.object({ template: Template }), status: 201 });
+  route("patch", "/receipt-templates/{id}", "Edit a receipt design", { tag: t, body: ReceiptTemplateBody.partial(), ok: z.object({ template: Template }) });
+  route("post", "/receipt-templates/{id}/default", "Make a design the business default", { tag: t, ok: z.object({ template: Template }) });
+  route("delete", "/receipt-templates/{id}", "Delete a receipt design", { tag: t, ok: null, status: 204 });
+  route("put", "/receipt-templates/branches/{branchId}", "Pick a branch's receipt design (null = business default)", { tag: t, body: BranchReceiptBody, ok: z.object({ branchId: z.string(), templateId: z.string().nullable() }) });
+  route("post", "/products/barcodes", "Make in-store EAN-13 barcodes for products without one", { tag: t, body: BarcodeGenerateBody, ok: z.object({ generated: z.array(z.object({ productId: z.string(), barcode: z.string() })), skipped: z.number().int() }) });
 }
 
 export function buildOpenApiDocument(version: string) {

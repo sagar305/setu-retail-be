@@ -21,6 +21,7 @@ export const branchDto = (b: Branch): z.infer<typeof BranchDto> => ({
   gstin: b.gstin,
   stateCode: b.stateCode,
   withinPlan: b.withinPlan,
+  receiptTemplateId: b.receiptTemplateId,
   createdAt: b.createdAt.toISOString(),
 });
 
