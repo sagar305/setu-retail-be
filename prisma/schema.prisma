@@ -117,14 +117,30 @@ model Account {
   keepActiveReviewPending Boolean   @default(false)
   /// Set by Setu (super-admin); blocks everyone.
   lockedBySetuAt          DateTime? @db.Timestamptz(3)
-  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
 
-  branches      Branch[]
-  users         User[]
-  subscriptions Subscription[]
-  redemptions   LicenseRedemption[]
-  auditLogs     AuditLog[]
+  // ── POS settings (owner) ──
+  /// Charge GST on bills. On for accounts that signed up with a GSTIN.
+  taxEnabled           Boolean  @default(false)
+  /// Sell a stocked product even when its branch stock would go below zero.
+  allowNegativeStock   Boolean  @default(true)
+  /// Largest bill discount a cashier may give, in basis points (1000 = 10%).
+  cashierMaxDiscountBp Int      @default(1000)
+  receiptFooter        String   @default("Thank you for shopping with us!")
+  /// "80mm" | "58mm" | "a4"
+  receiptPaperSize     String   @default("80mm")
+  createdAt            DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+
+  branches       Branch[]
+  users          User[]
+  subscriptions  Subscription[]
+  redemptions    LicenseRedemption[]
+  auditLogs      AuditLog[]
+  categories     Category[]
+  products       Product[]
+  customers      Customer[]
+  paymentMethods PaymentMethod[]
+  orders         Order[]
 
   @@map("accounts")
 }
@@ -147,8 +163,11 @@ model Branch {
   createdAt  DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
 
-  account Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  users   UserBranch[]
+  account  Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  users    UserBranch[]
+  products BranchProduct[]
+  counters Counter[]
+  orders   Order[]
 
   @@unique([accountId, number])
   @@unique([accountId, code])
@@ -273,4 +292,333 @@ model AuditLog {
 
   @@index([accountId, createdAt])
   @@map("audit_logs")
+}
+
+// ─── Catalogue & stock ──────────────────────────────────────────────────────
+// Quantities are integer thousandths ("milli") so 1.5 kg = 1500; money is paise.
+
+model Category {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  name       String
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([accountId])
+  @@map("categories")
+}
+
+/// One catalogue for the business; price and stock are per branch (BranchProduct).
+model Product {
+  id            String    @id @default(uuid()) @db.Uuid
+  accountId     String    @db.Uuid
+  categoryId    String?   @db.Uuid
+  name          String
+  sku           String    @default("")
+  barcode       String    @default("")
+  hsn           String    @default("")
+  /// GST rate in basis points: 500 = 5%, 1800 = 18%.
+  gstRateBp     Int       @default(0)
+  /// True when the price already includes GST (MRP-style).
+  taxInclusive  Boolean   @default(true)
+  unit          String    @default("pcs")
+  /// Default selling price in paise; a branch may override it.
+  price         Int
+  /// Cost in paise; owner/manager only.
+  costPrice     Int?
+  trackStock    Boolean   @default(true)
+  /// Stock at or below this (milli) counts as low; null = 5 units.
+  lowStockMilli Int?
+  archivedAt    DateTime? @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  account  Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  category Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  branches BranchProduct[]
+
+  @@index([accountId, name])
+  @@index([accountId, barcode])
+  @@map("products")
+}
+
+/// A product in a branch: its own price (or the default) and its stock.
+model BranchProduct {
+  branchId   String   @db.Uuid
+  productId  String   @db.Uuid
+  /// Paise; null = use the product's default price.
+  price      Int?
+  stockMilli Int      @default(0)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  branch  Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([branchId, productId])
+  @@index([productId])
+  @@map("branch_products")
+}
+
+enum InventoryChange {
+  OPENING
+  ADD
+  REDUCE
+  SET
+  SALE
+  CANCEL
+  RETURN
+}
+
+model InventoryLog {
+  id              String          @id @default(uuid()) @db.Uuid
+  accountId       String          @db.Uuid
+  branchId        String          @db.Uuid
+  productId       String          @db.Uuid
+  type            InventoryChange
+  changeMilli     Int
+  stockAfterMilli Int
+  note            String          @default("")
+  /// The order or credit note behind a SALE / CANCEL / RETURN.
+  refId           String?         @db.Uuid
+  userId          String?         @db.Uuid
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+
+  @@index([branchId, productId, createdAt])
+  @@map("inventory_logs")
+}
+
+// ─── Sales ──────────────────────────────────────────────────────────────────
+
+model Customer {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  name       String
+  /// Digits only (lib/normalize).
+  phone      String    @default("")
+  email      String    @default("")
+  address    String    @default("")
+  gstin      String?
+  /// GST state code for place of supply, e.g. "27".
+  stateCode  String?
+  notes      String    @default("")
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  orders  Order[]
+
+  @@index([accountId, name])
+  @@index([accountId, phone])
+  @@map("customers")
+}
+
+enum PaymentKind {
+  CASH
+  UPI
+  CARD
+  /// Udhaar: needs a customer; balance tracked by the Customer Ledger (Phase 4).
+  CREDIT
+  OTHER
+}
+
+model PaymentMethod {
+  id        String      @id @default(uuid()) @db.Uuid
+  accountId String      @db.Uuid
+  name      String
+  kind      PaymentKind
+  active    Boolean     @default(true)
+  sort      Int         @default(0)
+  createdAt DateTime    @default(now()) @db.Timestamptz(3)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@map("payment_methods")
+}
+
+/// A billing counter (one device/browser) in a branch. Each has its own bill
+/// and credit-note series, so counters never clash — even offline (Phase 3).
+model Counter {
+  id                   String    @id @default(uuid()) @db.Uuid
+  branchId             String    @db.Uuid
+  number               Int
+  /// "C" + number, used in B1-C2-00045.
+  code                 String
+  name                 String
+  nextInvoiceNumber    Int       @default(1)
+  nextCreditNoteNumber Int       @default(1)
+  lastSeenAt           DateTime? @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+
+  branch Branch  @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  orders Order[]
+
+  @@unique([branchId, number])
+  @@map("counters")
+}
+
+enum OrderStatus {
+  COMPLETED
+  CANCELLED
+}
+
+/// A bill. Amounts are paise and frozen at the time of sale.
+model Order {
+  id            String      @id @db.Uuid
+  accountId     String      @db.Uuid
+  branchId      String      @db.Uuid
+  counterId     String      @db.Uuid
+  cashierId     String      @db.Uuid
+  invoiceNumber String
+  status        OrderStatus @default(COMPLETED)
+  customerId    String?     @db.Uuid
+  customerName  String      @default("")
+  customerPhone String      @default("")
+  customerGstin String?
+  /// GST state code of the place of supply; null when GST is off.
+  placeOfSupply String?
+  interState    Boolean     @default(false)
+  taxEnabled    Boolean
+  discountType  String      @default("flat")
+  /// Paise for "flat", basis points for "percent".
+  discountValue Int         @default(0)
+  subtotal      Int
+  discountTotal Int
+  taxableTotal  Int
+  cgstTotal     Int
+  sgstTotal     Int
+  igstTotal     Int
+  total         Int
+  /// Sum of credit notes against this bill.
+  returnedTotal Int         @default(0)
+  note          String      @default("")
+  cancelledAt   DateTime?   @db.Timestamptz(3)
+  cancelledById String?     @db.Uuid
+  cancelReason  String      @default("")
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+
+  account     Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  branch      Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  counter     Counter        @relation(fields: [counterId], references: [id])
+  customer    Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items       OrderItem[]
+  payments    OrderPayment[]
+  creditNotes CreditNote[]
+
+  @@unique([accountId, invoiceNumber])
+  @@index([accountId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([cashierId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id               String  @id @default(uuid()) @db.Uuid
+  orderId          String  @db.Uuid
+  productId        String? @db.Uuid
+  position         Int
+  name             String
+  hsn              String
+  unit             String
+  qtyMilli         Int
+  unitPrice        Int
+  gstRateBp        Int
+  taxInclusive     Boolean
+  /// Price × qty before discount.
+  gross            Int
+  /// This line's share of the bill discount.
+  discount         Int
+  taxable          Int
+  cgst             Int
+  sgst             Int
+  igst             Int
+  /// What the customer pays for this line.
+  total            Int
+  /// Cost per unit at sale time (paise), for margin reports.
+  unitCost         Int?
+  returnedQtyMilli Int     @default(0)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model OrderPayment {
+  id         String      @id @default(uuid()) @db.Uuid
+  orderId    String      @db.Uuid
+  methodId   String?     @db.Uuid
+  methodName String
+  kind       PaymentKind
+  amount     Int
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_payments")
+}
+
+/// A GST credit note for returned items (a partial or full return).
+model CreditNote {
+  id               String      @id @default(uuid()) @db.Uuid
+  accountId        String      @db.Uuid
+  orderId          String      @db.Uuid
+  branchId         String      @db.Uuid
+  counterId        String      @db.Uuid
+  userId           String      @db.Uuid
+  number           String
+  reason           String      @default("")
+  refundMethodId   String?     @db.Uuid
+  refundMethodName String
+  refundKind       PaymentKind
+  taxableTotal     Int
+  cgstTotal        Int
+  sgstTotal        Int
+  igstTotal        Int
+  total            Int
+  createdAt        DateTime    @default(now()) @db.Timestamptz(3)
+
+  order Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items CreditNoteItem[]
+
+  @@unique([accountId, number])
+  @@index([orderId])
+  @@index([branchId, createdAt])
+  @@map("credit_notes")
+}
+
+model CreditNoteItem {
+  id           String @id @default(uuid()) @db.Uuid
+  creditNoteId String @db.Uuid
+  orderItemId  String @db.Uuid
+  qtyMilli     Int
+  taxable      Int
+  cgst         Int
+  sgst         Int
+  igst         Int
+  total        Int
+
+  creditNote CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
+
+  @@index([creditNoteId])
+  @@map("credit_note_items")
+}
+
+/// A parked bill to recall later at the same branch.
+model HeldCart {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @db.Uuid
+  branchId  String   @db.Uuid
+  userId    String   @db.Uuid
+  label     String
+  /// { lines: [{ productId, qtyMilli }], customerId, discount }
+  payload   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([branchId, createdAt])
+  @@map("held_carts")
 }

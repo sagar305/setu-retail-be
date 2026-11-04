@@ -27,7 +27,7 @@ export function db(): PrismaClient {
 
 export async function resetDb() {
   const p = db();
-  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans CASCADE");
+  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans, inventory_logs, held_carts CASCADE");
   for (const plan of PUBLIC_PLANS) await p.plan.create({ data: { ...plan, isPublic: true } });
 }
 
@@ -74,7 +74,7 @@ export async function signIn(h: H, login: string, password = "s3cret-pass") {
   const res = await agent.post("/auth/login").send({ login, password });
   if (res.status !== 200) throw new Error(`login failed: ${res.status} ${JSON.stringify(res.body)}`);
   const token = res.body.accessToken as string;
-  const as = (method: "get" | "post" | "patch", path: string) => agent[method](path).set("Authorization", `Bearer ${token}`);
+  const as = (method: "get" | "post" | "patch" | "put" | "delete", path: string) => agent[method](path).set("Authorization", `Bearer ${token}`);
   const cookie = (res.headers["set-cookie"] as unknown as string[])[0]!.split(";")[0]!;
   return { agent, token, me: res.body.me, as, cookie };
 }

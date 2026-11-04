@@ -14,6 +14,10 @@ import { authRouter } from "./routes/auth.js";
 import { branchesRouter } from "./routes/branches.js";
 import { healthRouter } from "./routes/health.js";
 import { staffRouter } from "./routes/staff.js";
+import { catalogueRouter } from "./routes/catalogue.js";
+import { customersRouter } from "./routes/customers.js";
+import { ordersRouter } from "./routes/orders.js";
+import { settingsRouter } from "./routes/settings.js";
 import { VERSION } from "./version.js";
 
 export type AppDeps = {
@@ -62,8 +66,12 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(accountRouter(ctx));
     app.use(branchesRouter(ctx));
     app.use(staffRouter(ctx));
+    app.use(settingsRouter(ctx));
+    app.use(catalogueRouter(ctx));
+    app.use(customersRouter(ctx));
+    app.use(ordersRouter(ctx));
   } else {
-    app.use(["/auth", "/me", "/account", "/branches", "/staff"], (_req, _res, next) =>
+    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }

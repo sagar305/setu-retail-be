@@ -27,6 +27,7 @@ import {
   VerifyEmailBody,
 } from "../schemas.js";
 import { audit } from "../services/audit.js";
+import { DEFAULT_PAYMENT_METHODS } from "./settings.js";
 import { addMonths, planState } from "../services/plans.js";
 
 const HOUR = 3600_000;
@@ -121,8 +122,9 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     try {
       owner = await ctx.prisma.$transaction(async (tx) => {
         const account = await tx.account.create({
-          data: { name: body.businessName, phone, taxNumber, nextBranchNumber: 2 },
+          data: { name: body.businessName, phone, taxNumber, nextBranchNumber: 2, taxEnabled: isGstin },
         });
+        await tx.paymentMethod.createMany({ data: DEFAULT_PAYMENT_METHODS.map((m) => ({ ...m, accountId: account.id })) });
         await tx.branch.create({
           data: { accountId: account.id, number: 1, code: "B1", name: "Main branch", phone: body.phone, gstin: isGstin ? taxNumber : null, stateCode: isGstin ? taxNumber!.slice(0, 2) : null },
         });

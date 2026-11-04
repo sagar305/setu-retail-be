@@ -2,6 +2,7 @@ import "./zodOpenApi.js";
 import { OpenAPIRegistry, OpenApiGeneratorV31 } from "@asteasolutions/zod-to-openapi";
 import { z, type ZodType } from "zod";
 import * as S from "./schemas.js";
+import * as P from "./schemas2.js";
 
 
 // Every route registers its request/response schemas here, so the frontend can
@@ -36,7 +37,7 @@ const Plan = registry.register("Plan", S.PlanDto);
 const json = (schema: ZodType) => ({ content: { "application/json": { schema } } });
 const errors = { 400: { description: "Invalid request", ...json(ErrorResponse) }, 401: { description: "Not signed in", ...json(ErrorResponse) } };
 
-type Method = "get" | "post" | "patch";
+type Method = "get" | "post" | "patch" | "put" | "delete";
 function route(method: Method, path: string, summary: string, opts: { body?: ZodType; ok: ZodType | null; status?: number; secure?: boolean; tag: string }) {
   registry.registerPath({
     method,
@@ -97,6 +98,55 @@ route("get", "/staff", "Staff the user can manage", { tag: "staff", ok: z.object
 route("post", "/staff", "Invite a manager or cashier (emails a set-password link; plan limit applies)", { tag: "staff", body: S.InviteStaffBody, ok: z.object({ staff: Staff }), status: 201 });
 route("post", "/staff/{id}/resend-invite", "Send the invite email again", { tag: "staff", ok: z.object({ sent: z.literal(true) }) });
 route("patch", "/staff/{id}", "Change name, role, branches, or remove/restore access", { tag: "staff", body: S.StaffPatchBody, ok: z.object({ staff: Staff }) });
+
+// ── Phase 2a: POS ──
+const Settings = registry.register("Settings", P.SettingsDto);
+const PaymentMethod = registry.register("PaymentMethod", P.PaymentMethodDto);
+const Counter = registry.register("Counter", P.CounterDto);
+const Category = registry.register("Category", P.CategoryDto);
+const Product = registry.register("Product", P.ProductDto);
+const Customer = registry.register("Customer", P.CustomerDto);
+const Order = registry.register("Order", P.OrderDto);
+const OrderSummary = registry.register("OrderSummary", P.OrderSummaryDto);
+const HeldCart = registry.register("HeldCart", P.HeldCartDto);
+registry.register("OrderBody", P.OrderBody);
+registry.register("ProductBody", P.ProductBody);
+
+route("get", "/settings", "POS settings and business details for receipts", { tag: "settings", ok: Settings });
+route("patch", "/settings", "Change POS settings (owner)", { tag: "settings", body: P.SettingsPatchBody, ok: Settings });
+route("get", "/payment-methods", "Payment methods", { tag: "settings", ok: z.object({ methods: z.array(PaymentMethod) }) });
+route("post", "/payment-methods", "Add a payment method (owner)", { tag: "settings", body: P.PaymentMethodBody, ok: z.object({ method: PaymentMethod }), status: 201 });
+route("patch", "/payment-methods/{id}", "Edit a payment method (owner)", { tag: "settings", body: P.PaymentMethodBody.partial(), ok: z.object({ method: PaymentMethod }) });
+route("get", "/counters", "Counters of a branch (?branchId=)", { tag: "counters", ok: z.object({ counters: z.array(Counter) }) });
+route("post", "/counters", "Register this device as a counter (gets its own bill series)", { tag: "counters", body: P.CounterBody, ok: z.object({ counter: Counter }), status: 201 });
+route("patch", "/counters/{id}", "Rename a counter", { tag: "counters", body: P.CounterPatchBody, ok: z.object({ counter: Counter }) });
+
+route("get", "/categories", "Product categories", { tag: "catalogue", ok: z.object({ categories: z.array(Category) }) });
+route("post", "/categories", "Add a category", { tag: "catalogue", body: P.CategoryBody, ok: z.object({ category: Category }), status: 201 });
+route("patch", "/categories/{id}", "Rename a category", { tag: "catalogue", body: P.CategoryBody, ok: z.object({ category: Category }) });
+route("delete", "/categories/{id}", "Remove a category", { tag: "catalogue", ok: null, status: 204 });
+route("get", "/products", "Products with this branch's price and stock (?branchId=&q=&categoryId=&limit=&offset=)", { tag: "catalogue", ok: z.object({ products: z.array(Product), total: z.number().int() }) });
+route("get", "/products/{id}", "A product with price and stock per branch", { tag: "catalogue", ok: z.object({ product: Product, branches: z.array(z.object({ branchId: z.string(), code: z.string(), name: z.string(), price: z.number().nullable(), stockMilli: z.number(), withinPlan: z.boolean() })) }) });
+route("post", "/products", "Add a product (owner/manager; plan limit applies)", { tag: "catalogue", body: P.ProductBody, ok: z.object({ product: Product }), status: 201 });
+route("patch", "/products/{id}", "Edit a product", { tag: "catalogue", body: P.ProductPatchBody, ok: z.object({ product: Product }) });
+route("delete", "/products/{id}", "Stop selling a product (kept for old bills)", { tag: "catalogue", ok: null, status: 204 });
+route("put", "/products/{id}/branches/{branchId}", "Set or clear a branch's own price", { tag: "catalogue", body: P.BranchPriceBody, ok: z.object({ product: Product }) });
+route("post", "/products/{id}/stock", "Add, reduce or set a branch's stock", { tag: "catalogue", body: P.StockAdjustBody, ok: z.object({ stockMilli: z.number().int() }) });
+route("get", "/products/{id}/stock-history", "Stock movements in a branch (?branchId=)", { tag: "catalogue", ok: z.object({ history: z.array(z.object({ id: z.string(), type: z.string(), changeMilli: z.number(), stockAfterMilli: z.number(), note: z.string(), refId: z.string().nullable(), createdAt: z.string() })) }) });
+
+route("get", "/customers", "Customers (?q= name, phone or GSTIN)", { tag: "customers", ok: z.object({ customers: z.array(Customer), total: z.number().int() }) });
+route("get", "/customers/{id}", "A customer", { tag: "customers", ok: z.object({ customer: Customer }) });
+route("post", "/customers", "Add a customer (any role; plan limit applies)", { tag: "customers", body: P.CustomerBody, ok: z.object({ customer: Customer }), status: 201 });
+route("patch", "/customers/{id}", "Edit a customer (owner/manager)", { tag: "customers", body: P.CustomerPatchBody, ok: z.object({ customer: Customer }) });
+
+route("post", "/orders", "Create a bill (idempotent on id)", { tag: "orders", body: P.OrderBody, ok: z.object({ order: Order, replayed: z.boolean().optional() }), status: 201 });
+route("get", "/orders", "Bills (?branchId=&from=&to=&status=&q=&before=&limit=); cashiers: own bills today", { tag: "orders", ok: z.object({ orders: z.array(OrderSummary) }) });
+route("get", "/orders/{id}", "A bill with items, payments and credit notes", { tag: "orders", ok: z.object({ order: Order }) });
+route("post", "/orders/{id}/cancel", "Cancel a bill and put stock back (owner/manager)", { tag: "orders", body: P.CancelBody, ok: z.object({ order: Order }) });
+route("post", "/orders/{id}/returns", "Return items: issues a GST credit note (owner/manager)", { tag: "orders", body: P.ReturnBody, ok: z.object({ order: Order }), status: 201 });
+route("get", "/held-carts", "Held bills in a branch (?branchId=)", { tag: "orders", ok: z.object({ carts: z.array(HeldCart) }) });
+route("post", "/held-carts", "Hold a bill", { tag: "orders", body: P.HeldCartBody, ok: z.object({ cart: HeldCart }), status: 201 });
+route("delete", "/held-carts/{id}", "Remove a held bill", { tag: "orders", ok: null, status: 204 });
 
 export function buildOpenApiDocument(version: string) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
