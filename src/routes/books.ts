@@ -15,6 +15,7 @@ import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normal
 import { audit } from "../services/audit.js";
 import { addDays, cashBook, dayStart, customerBalances, customerStatement, requireTool, supplierBalances, supplierStatement } from "../services/books.js";
 import { fromDay } from "../services/batches.js";
+import { changes } from "../lib/diff.js";
 import { CashEntryBody, CashOpeningBody, ExpenseBody, ExpensePatchBody, OpeningBody, PaymentBody, SupplierBody, SupplierPatchBody, VoidBody } from "../schemas4.js";
 import { branchFor } from "./access.js";
 import { customerDto } from "./customers.js";
@@ -149,7 +150,10 @@ export function booksRouter(ctx: Ctx): Router {
     const a = auth(req);
     const found = await findSupplier(a, req.params.id);
     const body = SupplierPatchBody.parse(req.body);
-    const s = await ctx.prisma.supplier.update({ where: { id: found.id }, data: { ...body, ...cleanSupplier(body) } });
+    const data = { ...body, ...cleanSupplier(body) };
+    const s = await ctx.prisma.supplier.update({ where: { id: found.id }, data });
+    const changed = changes(found, data);
+    if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "supplier.updated", entityType: "supplier", entityId: s.id, data: { name: found.name, changes: changed } as never });
     const balances = await supplierBalances(ctx.prisma, a.account.id, [s.id]);
     res.json({ supplier: supplierDto(s, balances.get(s.id) ?? 0) });
   });
@@ -160,6 +164,7 @@ export function booksRouter(ctx: Ctx): Router {
     const balance = (await supplierBalances(ctx.prisma, a.account.id, [s.id])).get(s.id) ?? 0;
     if (balance !== 0) throw new AppError(409, "has_balance", "Settle this supplier's balance before removing them.");
     await ctx.prisma.supplier.update({ where: { id: s.id }, data: { archivedAt: ctx.now() } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "supplier.archived", entityType: "supplier", entityId: s.id, data: { name: s.name } });
     res.status(204).end();
   });
 
@@ -206,6 +211,7 @@ export function booksRouter(ctx: Ctx): Router {
     const e = await ctx.prisma.expense.create({
       data: { id: body.id, accountId: a.account.id, branchId: branch.id, spentAt: at(ctx, body.spentAt), category: body.category, description: body.description ?? "", amount: body.amount, methodId: m.id, methodName: m.name, kind: m.kind, supplierId: body.supplierId ?? null, userId: a.user.id },
     });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "expense.created", entityType: "expense", entityId: e.id, data: { category: e.category, amount: e.amount, method: e.methodName } });
     res.status(201).json({ expense: expenseDto(e, { user: a.user.name }) });
   });
 
@@ -233,7 +239,7 @@ export function booksRouter(ctx: Ctx): Router {
         ...(m ? { methodId: m.id, methodName: m.name, kind: m.kind } : {}),
       },
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "expense.updated", entityType: "expense", entityId: e.id, data: { before: { amount: found.amount, category: found.category }, after: { amount: e.amount, category: e.category } } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: e.branchId, action: "expense.updated", entityType: "expense", entityId: e.id, data: { before: { amount: found.amount, category: found.category }, after: { amount: e.amount, category: e.category } } });
     res.json({ expense: expenseDto(e) });
   });
 
@@ -241,7 +247,7 @@ export function booksRouter(ctx: Ctx): Router {
     const a = auth(req);
     const e = await findExpense(a, req.params.id);
     await ctx.prisma.expense.update({ where: { id: e.id }, data: { deletedAt: ctx.now() } });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "expense.deleted", entityType: "expense", entityId: e.id, data: { amount: e.amount, category: e.category } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: e.branchId, action: "expense.deleted", entityType: "expense", entityId: e.id, data: { amount: e.amount, category: e.category } });
     res.status(204).end();
   });
 
@@ -277,6 +283,7 @@ export function booksRouter(ctx: Ctx): Router {
       await ctx.prisma.customerLedgerEntry.create({
         data: { id: body.id, accountId: a.account.id, customerId: c.id, branchId: branch.id, type: "PAYMENT", amount: body.amount, occurredAt: at(ctx, body.occurredAt), methodId: m.id, methodName: m.name, kind: m.kind, note: body.note ?? "", userId: a.user.id },
       });
+      await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "ledger.customer_payment", entityType: "customer", entityId: c.id, data: { name: c.name, amount: body.amount, method: m.name } });
     } catch (err) {
       // Same id again: the payment is already recorded.
       if (!isUniqueViolation(err)) throw err;
@@ -304,7 +311,7 @@ export function booksRouter(ctx: Ctx): Router {
     if (!e) throw new AppError(404, "not_found", "Entry not found.");
     if (e.branchId) branchFor(a, e.branchId, true);
     await ctx.prisma.customerLedgerEntry.update({ where: { id: e.id }, data: { voidedAt: ctx.now(), voidedById: a.user.id } });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "ledger.customer_entry_voided", entityType: "customer", entityId: e.customerId, data: { entryId: e.id, type: e.type, amount: e.amount, reason: body.reason ?? "" } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: e.branchId, action: "ledger.customer_entry_voided", entityType: "customer", entityId: e.customerId, data: { entryId: e.id, type: e.type, amount: e.amount, reason: body.reason ?? "" } });
     res.json({ ...(await customerStatement(ctx.prisma, a.account.id, e.customerId)) });
   });
 
@@ -335,6 +342,7 @@ export function booksRouter(ctx: Ctx): Router {
       await ctx.prisma.supplierLedgerEntry.create({
         data: { id: body.id, accountId: a.account.id, supplierId: s.id, branchId: branch.id, type: "PAYMENT", amount: body.amount, occurredAt: at(ctx, body.occurredAt), methodId: m.id, methodName: m.name, kind: m.kind, note: body.note ?? "", userId: a.user.id },
       });
+      await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "ledger.supplier_payment", entityType: "supplier", entityId: s.id, data: { name: s.name, amount: body.amount, method: m.name } });
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
     }
@@ -363,7 +371,7 @@ export function booksRouter(ctx: Ctx): Router {
     if (!e) throw new AppError(404, "not_found", "Entry not found.");
     if (e.branchId) branchFor(a, e.branchId, true);
     await ctx.prisma.supplierLedgerEntry.update({ where: { id: e.id }, data: { voidedAt: ctx.now(), voidedById: a.user.id } });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "ledger.supplier_entry_voided", entityType: "supplier", entityId: e.supplierId, data: { entryId: e.id, type: e.type, amount: e.amount, reason: body.reason ?? "" } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: e.branchId, action: "ledger.supplier_entry_voided", entityType: "supplier", entityId: e.supplierId, data: { entryId: e.id, type: e.type, amount: e.amount, reason: body.reason ?? "" } });
     res.json({ ...(await supplierStatement(ctx.prisma, a.account.id, e.supplierId)) });
   });
 
@@ -383,6 +391,7 @@ export function booksRouter(ctx: Ctx): Router {
     const branch = branchFor(a, body.branchId, true);
     try {
       await ctx.prisma.cashEntry.create({ data: { id: body.id, accountId: a.account.id, branchId: branch.id, type: body.type, amount: body.amount, description: body.description, occurredAt: at(ctx, body.occurredAt), userId: a.user.id } });
+      await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "cash_book.entry_added", entityType: "cash_entry", entityId: body.id, data: { type: body.type, amount: body.amount, description: body.description } });
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
     }
@@ -395,7 +404,7 @@ export function booksRouter(ctx: Ctx): Router {
     if (!e) throw new AppError(404, "not_found", "Entry not found.");
     branchFor(a, e.branchId, true);
     await ctx.prisma.cashEntry.update({ where: { id: e.id }, data: { deletedAt: ctx.now() } });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "cash_book.entry_deleted", entityType: "cash_entry", entityId: e.id, data: { type: e.type, amount: e.amount, description: e.description } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: e.branchId, action: "cash_book.entry_deleted", entityType: "cash_entry", entityId: e.id, data: { type: e.type, amount: e.amount, description: e.description } });
     res.status(204).end();
   });
 
@@ -408,7 +417,7 @@ export function booksRouter(ctx: Ctx): Router {
       create: { branchId: branch.id, accountId: a.account.id, day: fromDay(body.day), amount: body.amount, userId: a.user.id },
       update: { day: fromDay(body.day), amount: body.amount, userId: a.user.id },
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "cash_book.opening_set", entityType: "branch", entityId: branch.id, data: body });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "cash_book.opening_set", entityType: "branch", entityId: branch.id, data: body });
     res.json({ opening: { day: body.day, amount: body.amount } });
   });
 

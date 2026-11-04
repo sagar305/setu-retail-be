@@ -4,6 +4,7 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import type { Db } from "../db/types.js";
 import type { BranchProduct, InventoryChange, Prisma, Product } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
+import { changes } from "../lib/diff.js";
 import { BatchBody, BatchPatchBody, BranchPriceBody, CategoryBody, ProductBody, ProductPatchBody, StockAdjustBody } from "../schemas2.js";
 import { addToOpeningBatch, expiryStatus, fromDay, reconcileBatches, sortFefo, takeFromBatches, toDay } from "../services/batches.js";
 import { audit } from "../services/audit.js";
@@ -184,6 +185,7 @@ export function catalogueRouter(ctx: Ctx): Router {
       }
       return p;
     });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.created", entityType: "product", entityId: product.id, data: { name: product.name, price: product.price, openingStock: (openingStock ?? []).filter((o) => o.qtyMilli > 0).map((o) => ({ branchId: o.branchId, qtyMilli: o.qtyMilli })) } });
     res.status(201).json({ product: productDto(product, undefined, true) });
   });
 
@@ -192,9 +194,12 @@ export function catalogueRouter(ctx: Ctx): Router {
     const p = await findProduct(ctx, a, req.params.id);
     const body = ProductPatchBody.parse(req.body);
     const updated = await ctx.prisma.product.update({ where: { id: p.id }, data: body });
-    if (body.price !== undefined && body.price !== p.price) {
-      await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.price_changed", entityType: "product", entityId: p.id, data: { from: p.price, to: body.price } });
+    const changed = changes(p, body);
+    if ("price" in changed) {
+      await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.price_changed", entityType: "product", entityId: p.id, data: { name: p.name, from: p.price, to: body.price! } });
+      delete changed.price;
     }
+    if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.updated", entityType: "product", entityId: p.id, data: { name: p.name, changes: changed } as never });
     res.json({ product: productDto(updated, undefined, true) });
   });
 
@@ -216,7 +221,7 @@ export function catalogueRouter(ctx: Ctx): Router {
       create: { branchId: branch.id, productId: p.id, price },
       update: { price },
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.branch_price", entityType: "product", entityId: p.id, data: { branch: branch.code, price } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "product.branch_price", entityType: "product", entityId: p.id, data: { branch: branch.code, price } });
     res.json({ product: productDto(p, bp, true) });
   });
 
@@ -245,6 +250,7 @@ export function catalogueRouter(ctx: Ctx): Router {
       }
       return after;
     });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "product.stock_adjusted", entityType: "product", entityId: p.id, data: { name: p.name, type: body.type, qtyMilli: body.qtyMilli, stockAfterMilli: stock, note: body.note ?? "" } });
     res.json({ stockMilli: stock });
   });
 

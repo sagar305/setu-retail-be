@@ -148,7 +148,7 @@ export const StatementDto = z.object({
       dueDate: z.string().nullable(),
     }),
   ),
-  openItems: z.array(z.object({ id: z.string(), type: z.string(), ref: z.string(), at: z.string(), dueDate: z.string().nullable(), amount: Money, paid: Money, open: Money })),
+  openItems: z.array(z.object({ id: z.string(), type: z.string(), ref: z.string(), at: z.string(), dueDate: z.string().nullable(), amount: Money, paid: Money, open: Money, branchId: z.string().nullable() })),
 });
 export const CashBookDto = z.object({
   branchId: z.string(),

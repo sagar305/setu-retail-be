@@ -21,10 +21,13 @@ import { settingsRouter } from "./routes/settings.js";
 import { reportsRouter } from "./routes/reports.js";
 import { importsRouter } from "./routes/imports.js";
 import { syncRouter } from "./routes/sync.js";
+import { auditContext } from "./services/audit.js";
 import { booksRouter } from "./routes/books.js";
 import { purchasesRouter } from "./routes/purchases.js";
 import { toolReportsRouter } from "./routes/toolReports.js";
 import { receiptsRouter } from "./routes/receipts.js";
+import { transfersRouter } from "./routes/transfers.js";
+import { branchReportsRouter } from "./routes/branchReports.js";
 import { VERSION } from "./version.js";
 
 export type AppDeps = {
@@ -61,6 +64,7 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
   app.use("/sync", express.json({ limit: "5mb" }));
   app.use(express.json({ limit: "1mb" }));
   app.use(cookieParser());
+  app.use(auditContext);
   app.use(pinoHttp({ level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL }));
 
   app.use(healthRouter(checkDb));
@@ -83,12 +87,14 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(ordersRouter(ctx));
     app.use(reportsRouter(ctx));
     app.use(toolReportsRouter(ctx));
+    app.use(branchReportsRouter(ctx));
+    app.use(transfersRouter(ctx));
     app.use(importsRouter(ctx));
     app.use(booksRouter(ctx));
     app.use(purchasesRouter(ctx));
     app.use(syncRouter(ctx));
   } else {
-    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates"], (_req, _res, next) =>
+    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates", "/transfers", "/audit-log"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }

@@ -6,6 +6,8 @@ import { AppError } from "../http/errors.js";
 import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
 import { CustomerBody, CustomerPatchBody } from "../schemas2.js";
 import { planLimit } from "./access.js";
+import { audit } from "../services/audit.js";
+import { changes } from "../lib/diff.js";
 
 export const customerDto = (c: Customer) => ({
   id: c.id,
@@ -88,7 +90,10 @@ export function customersRouter(ctx: Ctx): Router {
     const body = CustomerPatchBody.parse(req.body);
     const found = await ctx.prisma.customer.findFirst({ where: { id: String(req.params.id), accountId: a.account.id } });
     if (!found) throw new AppError(404, "not_found", "Customer not found.");
-    const c = await ctx.prisma.customer.update({ where: { id: found.id }, data: { ...body, ...clean(body) } });
+    const data = { ...body, ...clean(body) };
+    const c = await ctx.prisma.customer.update({ where: { id: found.id }, data });
+    const changed = changes(found, data);
+    if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "customer.updated", entityType: "customer", entityId: c.id, data: { name: found.name, changes: changed } as never });
     res.json({ customer: customerDto(c) });
   });
 

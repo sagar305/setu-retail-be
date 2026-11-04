@@ -1,6 +1,6 @@
-# Setu Retail — Cloud POS (premium) — Build Plan v1.7
+# Setu Retail — Cloud POS (premium) — Build Plan v1.8
 
-Status: Phases 0–4a built. Phase 4b in progress.
+Status: Phases 0–4 built. Phase 5 in progress.
 
 ## 1. Confirmed decisions
 
@@ -44,6 +44,15 @@ Status: Phases 0–4a built. Phase 4b in progress.
 | Barcodes | A4 label sheets for many products, thermal label rolls (50×25 / 38×25 mm), single labels (Code 128 / EAN-13 / QR), and making in-store EAN-13 barcodes (starting with 2) for products without one |
 | Receipt designs | Several saved designs, one default for the business; each branch can choose its own; billing prints with it and the cashier can switch design when printing |
 | Old dues | Shops coming from the free browser POS import their **full history** (ledger, supplier ledger, purchases, expenses, cash book). Others enter an **opening balance** per customer or supplier with a date, counted as the oldest bill |
+
+### Multi-branch (Phase 5, v1.8)
+
+| Area | Decision |
+|---|---|
+| Transfers | **Send, then receive.** Sending takes stock out (in transit). The receiving branch checks the goods and accepts; short or damaged quantity per line either goes back to the sender or is written off. The sender can cancel before it's received. Owner any branches; manager only between their own branches |
+| Batches | With batch tracking on, the sender's batches (earliest expiry first, or picked) move with **the same batch number, expiry and cost** |
+| Branch reports | **Branch comparison** (sales, bills, average bill, returns, gross and net profit, expenses, stock value, udhaar outstanding per branch); **stock across branches** (each product's stock in every branch, low in one with spare in another highlighted); **transfer report** (moved, in transit, shortages) |
+| Audit log | All important actions with before → after: sign-ins (and failed ones), staff and roles, prices and stock, bill cancels and returns, payments and voids, expenses, settings, keys, transfers, imports. Filter by person, branch, action and date; CSV. Owner sees all, managers their branches. **Kept for 2 years** |
 
 ### Prices (GST included)
 

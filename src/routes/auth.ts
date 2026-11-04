@@ -197,6 +197,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
           where: { id: user.id },
           data: failed >= MAX_FAILED_LOGINS ? { failedLogins: 0, lockedUntil: new Date(now.getTime() + LOCKOUT_MS) } : { failedLogins: failed },
         });
+        await audit(ctx.prisma, { accountId: user.accountId, userId: user.id, action: "auth.sign_in_failed", entityType: "user", entityId: user.id, data: { attempt: failed, locked: failed >= MAX_FAILED_LOGINS } });
       }
       throw new AppError(401, "invalid_credentials", "Email/username or password is wrong.");
     }
@@ -205,6 +206,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     const { user: checked } = await assertCanHoldSession(ctx, user);
     const issued = await startSession(ctx, req, res, checked);
     await ctx.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: now } });
+    await audit(ctx.prisma, { accountId: user.accountId, userId: user.id, action: "auth.signed_in", entityType: "user", entityId: user.id, data: { userAgent: String(req.get("user-agent") ?? "").slice(0, 200) } });
     res.json(await respond(checked, issued));
   });
 

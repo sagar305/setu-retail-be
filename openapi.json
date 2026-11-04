@@ -4111,6 +4111,12 @@
                 },
                 "open": {
                   "type": "integer"
+                },
+                "branchId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
@@ -4121,7 +4127,8 @@
                 "dueDate",
                 "amount",
                 "paid",
-                "open"
+                "open",
+                "branchId"
               ]
             }
           }
@@ -4901,6 +4908,12 @@
                       "open": {
                         "type": "integer"
                       },
+                      "branchId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
                       "dueDay": {
                         "type": "string"
                       },
@@ -4927,6 +4940,7 @@
                       "amount",
                       "paid",
                       "open",
+                      "branchId",
                       "dueDay",
                       "bucket",
                       "daysOverdue"
@@ -5089,6 +5103,12 @@
                       "open": {
                         "type": "integer"
                       },
+                      "branchId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
                       "dueDay": {
                         "type": "string"
                       },
@@ -5115,6 +5135,7 @@
                       "amount",
                       "paid",
                       "open",
+                      "branchId",
                       "dueDay",
                       "bucket",
                       "daysOverdue"
@@ -5168,6 +5189,12 @@
                 "open": {
                   "type": "integer"
                 },
+                "branchId": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "dueDay": {
                   "type": "string"
                 },
@@ -5200,6 +5227,7 @@
                 "amount",
                 "paid",
                 "open",
+                "branchId",
                 "dueDay",
                 "bucket",
                 "daysOverdue",
@@ -5537,6 +5565,547 @@
           "boldTotals",
           "separator",
           "isDefault"
+        ]
+      },
+      "Transfer": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "fromBranchId": {
+            "type": "string"
+          },
+          "toBranchId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SENT",
+              "RECEIVED",
+              "CANCELLED"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "receiveNote": {
+            "type": "string"
+          },
+          "sentAt": {
+            "type": "string"
+          },
+          "sentByName": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receivedByName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cancelledAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": "integer"
+          },
+          "shortMilli": {
+            "type": "integer"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "productId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "qtyMilli": {
+                  "type": "integer"
+                },
+                "receivedMilli": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "returnedMilli": {
+                  "type": "integer"
+                },
+                "writtenOffMilli": {
+                  "type": "integer"
+                },
+                "unitCost": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ]
+                },
+                "batches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "batchNo": {
+                        "type": "string"
+                      },
+                      "expiry": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "costPrice": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "qtyMilli": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "batchNo",
+                      "expiry",
+                      "costPrice",
+                      "qtyMilli"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "productId",
+                "name",
+                "unit",
+                "qtyMilli",
+                "receivedMilli",
+                "returnedMilli",
+                "writtenOffMilli",
+                "unitCost",
+                "batches"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "number",
+          "fromBranchId",
+          "toBranchId",
+          "status",
+          "note",
+          "receiveNote",
+          "sentAt",
+          "sentByName",
+          "receivedAt",
+          "receivedByName",
+          "cancelledAt",
+          "value",
+          "shortMilli",
+          "items"
+        ]
+      },
+      "BranchComparison": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "branchId": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "bills": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                },
+                "returns": {
+                  "type": "integer"
+                },
+                "netSales": {
+                  "type": "integer"
+                },
+                "averageBill": {
+                  "type": "integer"
+                },
+                "revenue": {
+                  "type": "integer"
+                },
+                "cost": {
+                  "type": "integer"
+                },
+                "grossProfit": {
+                  "type": "integer"
+                },
+                "expenses": {
+                  "type": "integer"
+                },
+                "netProfit": {
+                  "type": "integer"
+                },
+                "stockValue": {
+                  "type": "integer"
+                },
+                "udhaar": {
+                  "type": "integer"
+                },
+                "inTransitIn": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "branchId",
+                "code",
+                "name",
+                "bills",
+                "sales",
+                "returns",
+                "netSales",
+                "averageBill",
+                "revenue",
+                "cost",
+                "grossProfit",
+                "expenses",
+                "netProfit",
+                "stockValue",
+                "udhaar",
+                "inTransitIn"
+              ]
+            }
+          },
+          "udhaarUnassigned": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "branches",
+          "udhaarUnassigned"
+        ]
+      },
+      "StockAcross": {
+        "type": "object",
+        "properties": {
+          "branches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "code",
+                "name"
+              ]
+            }
+          },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "productId": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "sku": {
+                  "type": "string"
+                },
+                "unit": {
+                  "type": "string"
+                },
+                "total": {
+                  "type": "integer"
+                },
+                "stock": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "branchId": {
+                        "type": "string"
+                      },
+                      "stockMilli": {
+                        "type": "integer"
+                      },
+                      "lowMilli": {
+                        "type": "integer"
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "ok",
+                          "low",
+                          "out"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "branchId",
+                      "stockMilli",
+                      "lowMilli",
+                      "status"
+                    ]
+                  }
+                },
+                "suggestion": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "properties": {
+                    "toBranchId": {
+                      "type": "string"
+                    },
+                    "fromBranchId": {
+                      "type": "string"
+                    },
+                    "qtyMilli": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "toBranchId",
+                    "fromBranchId",
+                    "qtyMilli"
+                  ]
+                }
+              },
+              "required": [
+                "productId",
+                "name",
+                "sku",
+                "unit",
+                "total",
+                "stock",
+                "suggestion"
+              ]
+            }
+          }
+        },
+        "required": [
+          "branches",
+          "products"
+        ]
+      },
+      "TransferReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "sent": {
+                "type": "integer"
+              },
+              "sentValue": {
+                "type": "integer"
+              },
+              "inTransit": {
+                "type": "integer"
+              },
+              "inTransitValue": {
+                "type": "integer"
+              },
+              "returnedValue": {
+                "type": "integer"
+              },
+              "writtenOffValue": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "sent",
+              "sentValue",
+              "inTransit",
+              "inTransitValue",
+              "returnedValue",
+              "writtenOffValue"
+            ]
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "number": {
+                  "type": "string"
+                },
+                "sentAt": {
+                  "type": "string"
+                },
+                "fromBranchId": {
+                  "type": "string"
+                },
+                "toBranchId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "lines": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": "integer"
+                },
+                "returnedValue": {
+                  "type": "integer"
+                },
+                "writtenOffValue": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "id",
+                "number",
+                "sentAt",
+                "fromBranchId",
+                "toBranchId",
+                "status",
+                "lines",
+                "value",
+                "returnedValue",
+                "writtenOffValue"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "totals",
+          "rows"
+        ]
+      },
+      "AuditEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "userName": {
+            "type": "string"
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "branchId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "branchCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "data": {}
+        },
+        "required": [
+          "id",
+          "createdAt",
+          "action",
+          "entityType",
+          "entityId",
+          "userId",
+          "userName",
+          "role",
+          "branchId",
+          "branchCode",
+          "ip"
         ]
       }
     },
@@ -14429,6 +14998,673 @@
                   "required": [
                     "generated",
                     "skipped"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers": {
+      "get": {
+        "summary": "Stock transfers touching your branches (?branchId=&status=)",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transfers": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Transfer"
+                      }
+                    }
+                  },
+                  "required": [
+                    "transfers"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Send stock to another branch (in transit; idempotent on id)",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "fromBranchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "toBranchId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "productId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "qtyMilli": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000000
+                        },
+                        "batches": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "batchId": {
+                                "type": "string",
+                                "format": "uuid"
+                              },
+                              "qtyMilli": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 1000000000
+                              }
+                            },
+                            "required": [
+                              "batchId",
+                              "qtyMilli"
+                            ]
+                          },
+                          "maxItems": 50
+                        }
+                      },
+                      "required": [
+                        "productId",
+                        "qtyMilli"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 300
+                  }
+                },
+                "required": [
+                  "id",
+                  "fromBranchId",
+                  "toBranchId",
+                  "lines"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transfer": {
+                      "$ref": "#/components/schemas/Transfer"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "transfer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers/{id}": {
+      "get": {
+        "summary": "A transfer",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transfer": {
+                      "$ref": "#/components/schemas/Transfer"
+                    }
+                  },
+                  "required": [
+                    "transfer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers/{id}/receive": {
+      "post": {
+        "summary": "Receive at the other branch; short/damaged back to sender or written off",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "maxLength": 300
+                  },
+                  "lines": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "itemId": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "receivedMilli": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "short": {
+                          "type": "string",
+                          "enum": [
+                            "RETURN",
+                            "WRITE_OFF"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "itemId",
+                        "receivedMilli"
+                      ]
+                    },
+                    "maxItems": 300
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transfer": {
+                      "$ref": "#/components/schemas/Transfer"
+                    }
+                  },
+                  "required": [
+                    "transfer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transfers/{id}/cancel": {
+      "post": {
+        "summary": "Cancel while in transit: stock back to the sender",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "transfer": {
+                      "$ref": "#/components/schemas/Transfer"
+                    }
+                  },
+                  "required": [
+                    "transfer"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/branches": {
+      "get": {
+        "summary": "Branches side by side (?from=&to= yyyy-mm-dd)",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BranchComparison"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/stock-across": {
+      "get": {
+        "summary": "Each product's stock in every branch, with transfer suggestions (?q=&only=suggestions)",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StockAcross"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/transfers": {
+      "get": {
+        "summary": "Transfers in a period, in transit, shortages (?from=&to=)",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransferReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-log": {
+      "get": {
+        "summary": "Audit log (?from=&to=&branchId=&userId=&action= prefix, &before= cursor, &limit=); managers see their branches",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AuditEntry"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "entries",
+                    "next"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit-log/filters": {
+      "get": {
+        "summary": "Actions and people for the audit log filters",
+        "tags": [
+          "branches"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "actions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "role": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "name",
+                          "role"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "actions",
+                    "users"
                   ]
                 }
               }

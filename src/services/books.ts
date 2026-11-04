@@ -104,7 +104,7 @@ export type StatementRow = {
   voidable: boolean;
   dueDate: string | null;
 };
-export type OpenItem = { id: string; type: string; ref: string; at: string; dueDate: string | null; amount: number; paid: number; open: number };
+export type OpenItem = { id: string; type: string; ref: string; at: string; dueDate: string | null; amount: number; paid: number; open: number; branchId: string | null };
 export type Statement = { balance: number; open: number; advance: number; rows: StatementRow[]; openItems: OpenItem[] };
 
 function buildStatement(rows: Omit<StatementRow, "balance">[]): Statement {
@@ -121,7 +121,7 @@ function buildStatement(rows: Omit<StatementRow, "balance">[]): Statement {
     open: settled.open,
     advance: settled.advance,
     rows: withBal.reverse(),
-    openItems: settled.dues.filter((d) => d.open > 0).map((d) => ({ id: d.id, type: byId.get(d.id)!.type, ref: byId.get(d.id)!.ref, at: d.at, dueDate: byId.get(d.id)!.dueDate, amount: d.amount, paid: d.paid, open: d.open })),
+    openItems: settled.dues.filter((d) => d.open > 0).map((d) => ({ id: d.id, type: byId.get(d.id)!.type, ref: byId.get(d.id)!.ref, at: d.at, dueDate: byId.get(d.id)!.dueDate, amount: d.amount, paid: d.paid, open: d.open, branchId: byId.get(d.id)!.branchId })),
   };
 }
 

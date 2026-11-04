@@ -136,6 +136,8 @@ model Account {
   creditDays           Int      @default(0)
   /// Shop logo for receipts (PNG/JPEG data URL, small).
   logoDataUrl          String?
+  /// Next stock transfer number (T-00001…).
+  nextTransferNumber   Int      @default(1)
   createdAt            DateTime @default(now()) @db.Timestamptz(3)
   updatedAt            DateTime @updatedAt @db.Timestamptz(3)
 
@@ -302,11 +304,17 @@ model AuditLog {
   entityType String
   entityId   String?
   data       Json?
+  /// The branch it happened in, for managers' view of their branches.
+  branchId   String?  @db.Uuid
+  /// Where the request came from (IP), for sign-ins and sensitive changes.
+  ip         String?
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([accountId, createdAt])
+  @@index([accountId, branchId, createdAt])
+  @@index([accountId, userId, createdAt])
   @@map("audit_logs")
 }
 
@@ -394,6 +402,12 @@ enum InventoryChange {
   REPLACEMENT
   /// A supplier bill was cancelled.
   PURCHASE_CANCEL
+  /// Sent to another branch (in transit).
+  TRANSFER_OUT
+  /// Received from another branch.
+  TRANSFER_IN
+  /// Back to the sending branch: short or damaged on arrival, or transfer cancelled.
+  TRANSFER_RETURN
 }
 
 model InventoryLog {
@@ -1017,4 +1031,77 @@ model ReceiptTemplate {
 
   @@index([accountId])
   @@map("receipt_templates")
+}
+
+// ─────────────────────────── Phase 5: stock transfers ───────────────────────────
+enum TransferStatus {
+  SENT
+  RECEIVED
+  CANCELLED
+}
+
+model StockTransfer {
+  id            String         @id @db.Uuid
+  accountId     String         @db.Uuid
+  /// T-00001, per account.
+  number        String
+  fromBranchId  String         @db.Uuid
+  toBranchId    String         @db.Uuid
+  status        TransferStatus @default(SENT)
+  note          String         @default("")
+  sentById      String         @db.Uuid
+  sentAt        DateTime       @db.Timestamptz(3)
+  receivedById  String?        @db.Uuid
+  receivedAt    DateTime?      @db.Timestamptz(3)
+  receiveNote   String         @default("")
+  cancelledById String?        @db.Uuid
+  cancelledAt   DateTime?      @db.Timestamptz(3)
+  createdAt     DateTime       @default(now()) @db.Timestamptz(3)
+
+  items StockTransferItem[]
+
+  @@unique([accountId, number])
+  @@index([accountId, status, sentAt])
+  @@index([fromBranchId, sentAt])
+  @@index([toBranchId, sentAt])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id              String @id @default(uuid()) @db.Uuid
+  transferId      String @db.Uuid
+  productId       String @db.Uuid
+  name            String
+  unit            String
+  qtyMilli        Int
+  /// Set on receipt: what arrived in good condition.
+  receivedMilli   Int?
+  /// Short / damaged: sent back to the sending branch.
+  returnedMilli   Int    @default(0)
+  /// Short / damaged: lost.
+  writtenOffMilli Int    @default(0)
+  /// Cost per unit at sending (paise), for value in transit.
+  unitCost        Int?
+
+  transfer StockTransfer        @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  batches  StockTransferBatch[]
+
+  @@index([transferId])
+  @@map("stock_transfer_items")
+}
+
+/// Which batches the stock left from (same batch no., expiry and cost arrive).
+model StockTransferBatch {
+  id            String    @id @default(uuid()) @db.Uuid
+  itemId        String    @db.Uuid
+  sourceBatchId String?   @db.Uuid
+  batchNo       String    @default("")
+  expiry        DateTime? @db.Date
+  costPrice     Int?
+  qtyMilli      Int
+
+  item StockTransferItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@map("stock_transfer_batches")
 }

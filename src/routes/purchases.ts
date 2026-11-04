@@ -240,7 +240,7 @@ export function purchasesRouter(ctx: Ctx): Router {
       }
       return tx.purchase.findUniqueOrThrow({ where: { id: body.id }, include: purchaseInclude });
     });
-    await audit(ctx.prisma, { accountId: account.id, userId: a.user.id, action: "purchase.created", entityType: "purchase", entityId: purchase.id, data: { billNumber: purchase.billNumber, supplier: supplier.name, total: purchase.total, paid: purchase.paidAmount } });
+    await audit(ctx.prisma, { accountId: account.id, userId: a.user.id, branchId: branch.id, action: "purchase.created", entityType: "purchase", entityId: purchase.id, data: { billNumber: purchase.billNumber, supplier: supplier.name, total: purchase.total, paid: purchase.paidAmount } });
     res.status(201).json({ purchase: purchaseDto(purchase) });
   });
 
@@ -264,7 +264,7 @@ export function purchasesRouter(ctx: Ctx): Router {
       await tx.purchase.update({ where: { id: p.id }, data: { cancelledAt: now, cancelReason: body.reason } });
       return tx.purchase.findUniqueOrThrow({ where: { id: p.id }, include: purchaseInclude });
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "purchase.cancelled", entityType: "purchase", entityId: p.id, data: { billNumber: p.billNumber, total: p.total, reason: body.reason } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: p.branchId, action: "purchase.cancelled", entityType: "purchase", entityId: p.id, data: { billNumber: p.billNumber, total: p.total, reason: body.reason } });
     res.json({ purchase: purchaseDto(done) });
   });
 
@@ -319,7 +319,7 @@ export function purchasesRouter(ctx: Ctx): Router {
       }
       return tx.purchase.findUniqueOrThrow({ where: { id: p.id }, include: purchaseInclude });
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "purchase.returned", entityType: "purchase", entityId: p.id, data: { returnId: body.id, mode: body.mode } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: p.branchId, action: "purchase.returned", entityType: "purchase", entityId: p.id, data: { returnId: body.id, mode: body.mode } });
     res.status(201).json({ purchase: purchaseDto(done) });
   });
 

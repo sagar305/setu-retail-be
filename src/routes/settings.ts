@@ -101,7 +101,7 @@ export function settingsRouter(ctx: Ctx): Router {
       await tx.counter.update({ where: { id: created.id }, data: { deviceKeyHash: key.hash } });
       return { ...created, deviceKey: key.key };
     });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "counter.created", entityType: "counter", entityId: counter.id, data: { branch: branch.code, code: counter.code } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "counter.created", entityType: "counter", entityId: counter.id, data: { branch: branch.code, code: counter.code } });
     // The device key is shown once; the device keeps it to sync offline bills.
     res.status(201).json({ counter: counterDto(counter), deviceKey: counter.deviceKey });
   });

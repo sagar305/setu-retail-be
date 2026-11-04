@@ -5,6 +5,8 @@ import * as S from "./schemas.js";
 import * as P from "./schemas2.js";
 import { PinBody, SyncCustomer, SyncCustomersBody, SyncMoneyBody, SyncMoneyOp, SyncOrder, SyncOrdersBody } from "./routes/sync.js";
 import * as F from "./schemas4.js";
+import { ReceiveBody, TransferBody, TransferDto } from "./routes/transfers.js";
+import { AuditEntryDto, BranchComparisonDto, StockAcrossDto, TransferReportDto } from "./routes/branchReports.js";
 import { BarcodeGenerateBody, BranchReceiptBody, ReceiptTemplateBody, ReceiptTemplateDto } from "./routes/receipts.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
@@ -316,7 +318,7 @@ for (const [method, path, summary, body, ok] of [
   const M = z.number().int();
   const t = "tools";
   const Buckets = z.object({ current: M, d30: M, d60: M, d90: M, d90plus: M });
-  const Aged = z.object({ id: z.string(), type: z.string(), ref: z.string(), at: z.string(), dueDate: z.string().nullable(), amount: M, paid: M, open: M, dueDay: z.string(), bucket: z.enum(["current", "d30", "d60", "d90", "d90plus"]), daysOverdue: z.number().int() });
+  const Aged = z.object({ id: z.string(), type: z.string(), ref: z.string(), at: z.string(), dueDate: z.string().nullable(), amount: M, paid: M, open: M, branchId: z.string().nullable(), dueDay: z.string(), bucket: z.enum(["current", "d30", "d60", "d90", "d90plus"]), daysOverdue: z.number().int() });
   const party = { name: z.string(), phone: z.string(), open: M, buckets: Buckets, items: z.array(Aged), maxDaysOverdue: z.number().int() };
   const common = { asOf: z.string(), buckets: z.array(z.object({ key: z.string(), label: z.string() })), totals: Buckets, total: M };
   const CustomerAging = registry.register("CustomerAging", z.object({ ...common, creditDays: z.number().int(), parties: z.array(z.object({ customerId: z.string(), creditDays: z.number().int(), ...party })) }));
@@ -337,6 +339,23 @@ for (const [method, path, summary, body, ok] of [
   route("delete", "/receipt-templates/{id}", "Delete a receipt design", { tag: t, ok: null, status: 204 });
   route("put", "/receipt-templates/branches/{branchId}", "Pick a branch's receipt design (null = business default)", { tag: t, body: BranchReceiptBody, ok: z.object({ branchId: z.string(), templateId: z.string().nullable() }) });
   route("post", "/products/barcodes", "Make in-store EAN-13 barcodes for products without one", { tag: t, body: BarcodeGenerateBody, ok: z.object({ generated: z.array(z.object({ productId: z.string(), barcode: z.string() })), skipped: z.number().int() }) });
+}
+
+// ── Phase 5: multi-branch ──
+{
+  const t = "branches";
+  const Transfer = registry.register("Transfer", TransferDto);
+  route("get", "/transfers", "Stock transfers touching your branches (?branchId=&status=)", { tag: t, ok: z.object({ transfers: z.array(Transfer) }) });
+  route("post", "/transfers", "Send stock to another branch (in transit; idempotent on id)", { tag: t, body: TransferBody, ok: z.object({ transfer: Transfer, replayed: z.boolean().optional() }), status: 201 });
+  route("get", "/transfers/{id}", "A transfer", { tag: t, ok: z.object({ transfer: Transfer }) });
+  route("post", "/transfers/{id}/receive", "Receive at the other branch; short/damaged back to sender or written off", { tag: t, body: ReceiveBody, ok: z.object({ transfer: Transfer }) });
+  route("post", "/transfers/{id}/cancel", "Cancel while in transit: stock back to the sender", { tag: t, ok: z.object({ transfer: Transfer }) });
+  route("get", "/reports/branches", "Branches side by side (?from=&to= yyyy-mm-dd)", { tag: t, ok: registry.register("BranchComparison", BranchComparisonDto) });
+  route("get", "/reports/stock-across", "Each product's stock in every branch, with transfer suggestions (?q=&only=suggestions)", { tag: t, ok: registry.register("StockAcross", StockAcrossDto) });
+  route("get", "/reports/transfers", "Transfers in a period, in transit, shortages (?from=&to=)", { tag: t, ok: registry.register("TransferReport", TransferReportDto) });
+  const Entry = registry.register("AuditEntry", AuditEntryDto);
+  route("get", "/audit-log", "Audit log (?from=&to=&branchId=&userId=&action= prefix, &before= cursor, &limit=); managers see their branches", { tag: t, ok: z.object({ entries: z.array(Entry), next: z.string().nullable() }) });
+  route("get", "/audit-log/filters", "Actions and people for the audit log filters", { tag: t, ok: z.object({ actions: z.array(z.string()), users: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) }) });
 }
 
 export function buildOpenApiDocument(version: string) {

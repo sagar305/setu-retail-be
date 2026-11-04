@@ -10,6 +10,7 @@ import type { ReceiptTemplate } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
 import { audit } from "../services/audit.js";
 import { requireTool } from "../services/books.js";
+import { changes } from "../lib/diff.js";
 import { branchFor } from "./access.js";
 
 const Text = (max: number) => z.string().trim().max(max);
@@ -98,6 +99,7 @@ export function receiptsRouter(ctx: Ctx): Router {
     const body = ReceiptTemplateBody.parse(req.body);
     const first = (await ctx.prisma.receiptTemplate.count({ where: { accountId: a.account.id, archivedAt: null } })) === 0;
     const t = await ctx.prisma.receiptTemplate.create({ data: { ...body, accountId: a.account.id, isDefault: first } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "receipt_design.created", entityType: "receipt_template", entityId: t.id, data: { name: t.name } });
     res.status(201).json({ template: templateDto(t) });
   });
 
@@ -111,7 +113,9 @@ export function receiptsRouter(ctx: Ctx): Router {
     const a = auth(req);
     const t = await find(a.account.id, req.params.id);
     const body = ReceiptTemplateBody.partial().parse(req.body);
-    res.json({ template: templateDto(await ctx.prisma.receiptTemplate.update({ where: { id: t.id }, data: body })) });
+    const updated = await ctx.prisma.receiptTemplate.update({ where: { id: t.id }, data: body });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "receipt_design.updated", entityType: "receipt_template", entityId: t.id, data: { name: t.name, changes: changes(t, body) } as never });
+    res.json({ template: templateDto(updated) });
   });
 
   router.post("/receipt-templates/:id/default", ...DESIGNER, async (req, res) => {
@@ -121,6 +125,7 @@ export function receiptsRouter(ctx: Ctx): Router {
       ctx.prisma.receiptTemplate.updateMany({ where: { accountId: a.account.id }, data: { isDefault: false } }),
       ctx.prisma.receiptTemplate.update({ where: { id: t.id }, data: { isDefault: true } }),
     ]);
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "receipt_design.default", entityType: "receipt_template", entityId: t.id, data: { name: t.name } });
     res.json({ template: templateDto({ ...t, isDefault: true }) });
   });
 
@@ -136,6 +141,7 @@ export function receiptsRouter(ctx: Ctx): Router {
         if (next) await tx.receiptTemplate.update({ where: { id: next.id }, data: { isDefault: true } });
       }
     });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "receipt_design.deleted", entityType: "receipt_template", entityId: t.id, data: { name: t.name } });
     res.status(204).end();
   });
 
@@ -146,6 +152,7 @@ export function receiptsRouter(ctx: Ctx): Router {
     const { templateId } = BranchReceiptBody.parse(req.body);
     if (templateId) await find(a.account.id, templateId);
     await ctx.prisma.branch.update({ where: { id: branch.id }, data: { receiptTemplateId: templateId } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: branch.id, action: "receipt_design.branch", entityType: "branch", entityId: branch.id, data: { templateId } });
     res.json({ branchId: branch.id, templateId });
   });
 

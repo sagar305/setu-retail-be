@@ -282,7 +282,7 @@ export function ordersRouter(ctx: Ctx): Router {
           await restoreToBatches(tx, i.id, i.qtyMilli);
         }
       }
-      await audit(tx, { accountId: a.account.id, userId: a.user.id, action: "order.cancelled", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, total: o.total, reason } });
+      await audit(tx, { accountId: a.account.id, userId: a.user.id, branchId: o.branchId, action: "order.cancelled", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, total: o.total, reason } });
       return tx.order.findUniqueOrThrow({ where: { id: o.id }, include: orderInclude });
     });
     res.json({ order: await withCashier(ctx, updated) });
@@ -350,7 +350,7 @@ export function ordersRouter(ctx: Ctx): Router {
           await restoreToBatches(tx, l.item.id, l.qtyMilli);
         }
       }
-      await audit(tx, { accountId: a.account.id, userId: a.user.id, action: "order.returned", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, creditNote: cn.number, total: cn.total, reason: body.reason } });
+      await audit(tx, { accountId: a.account.id, userId: a.user.id, branchId: o.branchId, action: "order.returned", entityType: "order", entityId: o.id, data: { invoiceNumber: o.invoiceNumber, creditNote: cn.number, total: cn.total, reason: body.reason } });
       return tx.order.findUniqueOrThrow({ where: { id: o.id }, include: orderInclude });
     });
     res.status(201).json({ order: await withCashier(ctx, updated) });

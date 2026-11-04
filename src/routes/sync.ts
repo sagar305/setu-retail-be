@@ -96,6 +96,7 @@ export function syncRouter(ctx: Ctx): Router {
   router.delete("/me/pin", authenticate(ctx), async (req, res) => {
     const a = auth(req);
     await ctx.prisma.user.update({ where: { id: a.user.id }, data: { pinHash: null, pinSalt: null, pinIterations: null } });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "user.pin_removed", entityType: "user", entityId: a.user.id });
     res.status(204).end();
   });
   router.get("/me/pin", authenticate(ctx), async (req, res) => {
@@ -111,7 +112,7 @@ export function syncRouter(ctx: Ctx): Router {
     branchFor(a, counter.branchId, true);
     const { key, hash } = newDeviceKey(counter.id);
     await ctx.prisma.counter.update({ where: { id: counter.id }, data: { deviceKeyHash: hash, lastSeenAt: ctx.now() } });
-    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "counter.device_key", entityType: "counter", entityId: counter.id });
+    await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, branchId: counter.branchId, action: "counter.device_key", entityType: "counter", entityId: counter.id });
     res.json({ deviceKey: key });
   });
 
@@ -186,6 +187,8 @@ export function syncRouter(ctx: Ctx): Router {
       await ctx.prisma.customer.create({ data: { id: c.id, accountId: account.id, name: c.name, phone, gstin, stateCode: c.stateCode || gstin?.slice(0, 2) || null } });
       results.push({ id: c.id, status: "saved" });
     }
+    const added = results.filter((r) => r.status === "saved").length;
+    if (added) await audit(ctx.prisma, { accountId: account.id, userId: null, branchId: device(req).branch.id, action: "sync.customers", entityType: "counter", entityId: device(req).counter.id, data: { saved: added } });
     res.json({ results });
   });
 
@@ -280,7 +283,7 @@ export function syncRouter(ctx: Ctx): Router {
       }
     }
     const saved = results.filter((r) => r.status === "saved").length;
-    if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, action: "sync.orders", entityType: "counter", entityId: counter.id, data: { saved, rejected: results.filter((r) => r.status === "rejected").length } });
+    if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, branchId: branch.id, action: "sync.orders", entityType: "counter", entityId: counter.id, data: { saved, rejected: results.filter((r) => r.status === "rejected").length } });
     res.json({ results });
   });
 
@@ -344,7 +347,7 @@ export function syncRouter(ctx: Ctx): Router {
     }
     await ctx.prisma.counter.update({ where: { id: counter.id }, data: { lastSeenAt: now } });
     const saved = results.filter((r) => r.status === "saved").length;
-    if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, action: "sync.money", entityType: "counter", entityId: counter.id, data: { saved } });
+    if (saved) await audit(ctx.prisma, { accountId: account.id, userId: null, branchId: branch.id, action: "sync.money", entityType: "counter", entityId: counter.id, data: { saved } });
     res.json({ results });
   });
 
