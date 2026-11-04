@@ -1,0 +1,2 @@
+// Bumped with releases; also reported by /health.
+export const VERSION = "0.1.0";

@@ -1,0 +1,32 @@
+// Setu Retail — database schema.
+// Phase 0 holds only the plan catalogue; tenancy, auth, catalogue, sales,
+// tools and sync tables arrive in later phases (see docs/PLAN.md).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A sellable plan and its limits. Limits live here (not in code) so they can
+/// be changed without a deploy. A null limit means unlimited.
+/// Contact-sales deals get their own row (isPublic = false), created when the
+/// Setu team issues a key for them.
+model Plan {
+  id                String   @id @default(uuid()) @db.Uuid
+  code              String   @unique
+  name              String
+  isPublic          Boolean  @default(true)
+  maxBranches       Int?
+  maxStaff          Int?
+  maxProducts       Int?
+  maxCustomers      Int?
+  maxOrdersPerMonth Int?
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("plans")
+}
