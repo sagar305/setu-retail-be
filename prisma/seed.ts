@@ -12,6 +12,8 @@ try {
       create: { ...plan, isPublic: true },
       update: {},
     });
+    // Fill in a price added after the row was first seeded; never overwrite one.
+    await prisma.plan.updateMany({ where: { code: plan.code, monthlyPriceInr: null }, data: { monthlyPriceInr: plan.monthlyPriceInr } });
   }
   console.log(`Seeded ${PUBLIC_PLANS.length} plans.`);
 } finally {

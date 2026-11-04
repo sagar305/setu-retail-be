@@ -11,12 +11,18 @@ export type PlanLimits = {
   maxOrdersPerMonth: number | null;
 };
 
-export type PlanSeed = PlanLimits & { code: PlanCode; name: string };
+export type PlanSeed = PlanLimits & {
+  code: PlanCode;
+  name: string;
+  /** Monthly INR price in paise (GST included); used to convert days on a plan switch. */
+  monthlyPriceInr: number;
+};
 
 export const PUBLIC_PLANS: readonly PlanSeed[] = [
   {
     code: "basic",
     name: "Basic",
+    monthlyPriceInr: 24_900,
     maxBranches: 1,
     maxStaff: 3,
     maxProducts: 1_000,
@@ -26,6 +32,7 @@ export const PUBLIC_PLANS: readonly PlanSeed[] = [
   {
     code: "gold",
     name: "Gold",
+    monthlyPriceInr: 49_900,
     maxBranches: 10,
     maxStaff: 30,
     maxProducts: 10_000,
@@ -35,6 +42,7 @@ export const PUBLIC_PLANS: readonly PlanSeed[] = [
   {
     code: "platinum",
     name: "Platinum",
+    monthlyPriceInr: 99_900,
     maxBranches: 100,
     maxStaff: 300,
     maxProducts: 100_000,

@@ -1,6 +1,5 @@
-// Setu Retail — database schema.
-// Phase 0 holds only the plan catalogue; tenancy, auth, catalogue, sales,
-// tools and sync tables arrive in later phases (see docs/PLAN.md).
+// Setu Retail — database schema. See docs/PLAN.md §3.
+// Every tenant table carries accountId; every query is scoped by it.
 
 generator client {
   provider = "prisma-client"
@@ -11,15 +10,19 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Plans & billing ────────────────────────────────────────────────────────
+
 /// A sellable plan and its limits. Limits live here (not in code) so they can
 /// be changed without a deploy. A null limit means unlimited.
-/// Contact-sales deals get their own row (isPublic = false), created when the
-/// Setu team issues a key for them.
+/// Contact-sales deals get their own row (isPublic = false).
 model Plan {
   id                String   @id @default(uuid()) @db.Uuid
   code              String   @unique
   name              String
   isPublic          Boolean  @default(true)
+  /// Monthly price in paise (INR). Used to convert remaining days when a
+  /// customer switches plan mid-term; null for custom plans.
+  monthlyPriceInr   Int?
   maxBranches       Int?
   maxStaff          Int?
   maxProducts       Int?
@@ -28,5 +31,246 @@ model Plan {
   createdAt         DateTime @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @db.Timestamptz(3)
 
+  subscriptions Subscription[]
+
   @@map("plans")
+}
+
+enum SubscriptionSource {
+  TRIAL
+  KEY
+}
+
+/// A period during which an account is on a plan. An account's timeline is
+/// its subscriptions ordered by startsAt; one may be queued in the future
+/// ("start after my current plan").
+model Subscription {
+  id           String             @id @default(uuid()) @db.Uuid
+  accountId    String             @db.Uuid
+  planId       String             @db.Uuid
+  source       SubscriptionSource
+  startsAt     DateTime           @db.Timestamptz(3)
+  endsAt       DateTime           @db.Timestamptz(3)
+  redemptionId String?            @db.Uuid
+  createdAt    DateTime           @default(now()) @db.Timestamptz(3)
+
+  account    Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  plan       Plan               @relation(fields: [planId], references: [id])
+  redemption LicenseRedemption? @relation(fields: [redemptionId], references: [id])
+
+  @@index([accountId, startsAt])
+  @@map("subscriptions")
+}
+
+enum RedemptionMode {
+  EXTEND
+  SWITCH_NOW
+  START_LATER
+}
+
+/// Each license key can be redeemed once: keyId is unique.
+model LicenseRedemption {
+  id            String         @id @default(uuid()) @db.Uuid
+  keyId         String         @unique
+  accountId     String         @db.Uuid
+  userId        String         @db.Uuid
+  planCode      String
+  days          Int
+  mode          RedemptionMode
+  /// Extra days added from converting the remaining current plan (SWITCH_NOW).
+  convertedDays Int            @default(0)
+  redeemedAt    DateTime       @default(now()) @db.Timestamptz(3)
+
+  account       Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@index([accountId])
+  @@map("license_redemptions")
+}
+
+/// One trial per email; a phone or tax number already used can't start
+/// another. Kept even if the account is later removed.
+model TrialClaim {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique
+  phone     String   @unique
+  taxNumber String?  @unique
+  accountId String?  @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("trial_claims")
+}
+
+// ─── Tenancy ────────────────────────────────────────────────────────────────
+
+model Account {
+  id                      String    @id @default(uuid()) @db.Uuid
+  name                    String
+  /// Digits only, last 10 for Indian numbers (see lib/normalize.ts).
+  phone                   String
+  taxNumber               String?
+  currency                String    @default("INR")
+  timezone                String    @default("Asia/Kolkata")
+  /// Next branch number; codes are B1, B2… and never reused.
+  nextBranchNumber        Int       @default(1)
+  /// Set when the plan shrank and the owner should review what stays active.
+  keepActiveReviewPending Boolean   @default(false)
+  /// Set by Setu (super-admin); blocks everyone.
+  lockedBySetuAt          DateTime? @db.Timestamptz(3)
+  createdAt               DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt               DateTime  @updatedAt @db.Timestamptz(3)
+
+  branches      Branch[]
+  users         User[]
+  subscriptions Subscription[]
+  redemptions   LicenseRedemption[]
+  auditLogs     AuditLog[]
+
+  @@map("accounts")
+}
+
+model Branch {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  number     Int
+  /// "B" + number; used in invoice numbers (B1-C2-00045).
+  code       String
+  name       String
+  address    String    @default("")
+  phone      String    @default("")
+  gstin      String?
+  /// Two-digit GST state code, e.g. "29" for Karnataka.
+  stateCode  String?
+  /// False when the plan allows fewer branches: kept, but read-only.
+  withinPlan Boolean   @default(true)
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  account Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  users   UserBranch[]
+
+  @@unique([accountId, number])
+  @@unique([accountId, code])
+  @@index([accountId, createdAt])
+  @@map("branches")
+}
+
+enum Role {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum UserStatus {
+  /// Invited; has not set a password yet.
+  INVITED
+  ACTIVE
+  /// Access removed by the owner or a manager.
+  DISABLED
+}
+
+model User {
+  id              String     @id @default(uuid()) @db.Uuid
+  accountId       String     @db.Uuid
+  /// Stored lower-case; unique across Setu Retail so login needs no business id.
+  email           String     @unique
+  /// Stored lower-case; unique across Setu Retail.
+  username        String     @unique
+  name            String
+  role            Role
+  status          UserStatus @default(ACTIVE)
+  passwordHash    String?
+  emailVerifiedAt DateTime?  @db.Timestamptz(3)
+  /// False when the plan allows fewer staff: cannot sign in until upgraded.
+  withinPlan      Boolean    @default(true)
+  failedLogins    Int        @default(0)
+  lockedUntil     DateTime?  @db.Timestamptz(3)
+  lastLoginAt     DateTime?  @db.Timestamptz(3)
+  createdAt       DateTime   @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime   @updatedAt @db.Timestamptz(3)
+
+  account  Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  branches UserBranch[]
+  sessions Session[]
+  tokens   OneTimeToken[]
+
+  @@index([accountId, createdAt])
+  @@map("users")
+}
+
+/// Manager → one or more branches; cashier → exactly one. Owner → none (all).
+model UserBranch {
+  userId   String @db.Uuid
+  branchId String @db.Uuid
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@id([userId, branchId])
+  @@index([branchId])
+  @@map("user_branches")
+}
+
+// ─── Auth ───────────────────────────────────────────────────────────────────
+
+/// A signed-in device. The refresh token rotates on every use; the session
+/// itself ends 12 hours after sign-in regardless (one shift).
+model Session {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @db.Uuid
+  refreshTokenHash String    @unique
+  /// The hash before the last rotation; seeing it again means the token was
+  /// stolen and replayed, so the session is revoked.
+  previousHash     String?   @unique
+  expiresAt        DateTime  @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  userAgent        String    @default("")
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  lastUsedAt       DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+enum TokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+  INVITE
+}
+
+/// Emailed links. Only a SHA-256 of the token is stored.
+model OneTimeToken {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @db.Uuid
+  purpose   TokenPurpose
+  tokenHash String       @unique
+  expiresAt DateTime     @db.Timestamptz(3)
+  usedAt    DateTime?    @db.Timestamptz(3)
+  createdAt DateTime     @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("one_time_tokens")
+}
+
+// ─── Platform ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  accountId  String   @db.Uuid
+  userId     String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  data       Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, createdAt])
+  @@map("audit_logs")
 }

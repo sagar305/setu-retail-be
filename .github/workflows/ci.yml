@@ -22,6 +22,8 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/setu_retail_ci
+      # Integration tests get their own database so the migration check below still starts empty.
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/setu_retail_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -33,6 +35,8 @@ jobs:
       - run: npx prisma generate
       - run: npm run lint
       - run: npm run typecheck
+      - name: Create the test database
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE setu_retail_test"
       - run: npm test
       - name: Migrations apply to an empty database
         run: npx prisma migrate deploy

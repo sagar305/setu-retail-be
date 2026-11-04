@@ -4,5 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
+    // Integration tests share one Postgres database.
+    fileParallelism: false,
   },
 });

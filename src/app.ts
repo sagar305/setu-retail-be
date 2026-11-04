@@ -1,20 +1,32 @@
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express } from "express";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { corsOrigins, type Env } from "./config/env.js";
-import { errorHandler, notFound } from "./http/errors.js";
+import type { Ctx } from "./context.js";
+import type { PrismaClient } from "./generated/prisma/client.js";
+import { AppError, errorHandler, notFound } from "./http/errors.js";
+import { LogMailer, type Mailer } from "./mail/mailer.js";
 import { buildOpenApiDocument } from "./openapi.js";
+import { accountRouter } from "./routes/account.js";
+import { authRouter } from "./routes/auth.js";
+import { branchesRouter } from "./routes/branches.js";
 import { healthRouter } from "./routes/health.js";
+import { staffRouter } from "./routes/staff.js";
 import { VERSION } from "./version.js";
 
 export type AppDeps = {
   env: Env;
+  /** Omitted in unit tests that don't touch the database; data routes then answer 503. */
+  prisma?: PrismaClient;
+  mailer?: Mailer;
+  now?: () => Date;
   /** Pings the database; omitted when no database is configured. */
   checkDb?: () => Promise<void>;
 };
 
-export function createApp({ env, checkDb }: AppDeps): Express {
+export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Express {
   const app = express();
   app.disable("x-powered-by");
   // Vercel (and most hosts) sit behind one proxy hop.
@@ -34,6 +46,7 @@ export function createApp({ env, checkDb }: AppDeps): Express {
   );
 
   app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
   app.use(pinoHttp({ level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL }));
 
   app.use(healthRouter(checkDb));
@@ -42,6 +55,18 @@ export function createApp({ env, checkDb }: AppDeps): Express {
   app.get("/openapi.json", (_req, res) => {
     res.json(openApi);
   });
+
+  if (prisma) {
+    const ctx: Ctx = { env, prisma, mailer: mailer ?? new LogMailer(), now: now ?? (() => new Date()) };
+    app.use(authRouter(ctx, allowed));
+    app.use(accountRouter(ctx));
+    app.use(branchesRouter(ctx));
+    app.use(staffRouter(ctx));
+  } else {
+    app.use(["/auth", "/me", "/account", "/branches", "/staff"], (_req, _res, next) =>
+      next(new AppError(503, "db_not_configured", "Database is not configured.")),
+    );
+  }
 
   app.use(notFound);
   app.use(errorHandler);
