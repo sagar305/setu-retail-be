@@ -12,7 +12,10 @@ export function getPrisma(): PrismaClient {
   if (!prisma) {
     const connectionString = process.env["DATABASE_URL"];
     if (!connectionString) throw new Error("DATABASE_URL is not set");
-    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+    // Each serverless instance keeps its own pool: keep it small so many
+    // instances fit in the database's connection limit (DATABASE_POOL_MAX).
+    const max = Number(process.env["DATABASE_POOL_MAX"] ?? 5);
+    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: Number.isInteger(max) && max > 0 ? max : 5, idleTimeoutMillis: 10_000 }) });
   }
   return prisma;
 }

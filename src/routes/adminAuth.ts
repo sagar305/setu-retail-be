@@ -21,6 +21,7 @@ import { hashPassword, verifyPassword } from "../lib/password.js";
 import { decryptTotpSecret, encryptTotpSecret, newTotpSecret, otpauthUrl, verifyTotp } from "../lib/totp.js";
 import { hashToken, newToken } from "../lib/tokens.js";
 import { adminInviteMail } from "../mail/templates.js";
+import { rateLimit, RULES } from "../services/rateLimit.js";
 import { AdminAcceptBody, AdminCodeBody, AdminLoginBody } from "../schemasAdmin.js";
 
 const MAX_FAILED = 5;
@@ -80,7 +81,7 @@ export function adminAuthRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     return { ...issued, admin: adminDto(fresh) };
   }
 
-  router.post("/admin/auth/login", async (req, res) => {
+  router.post("/admin/auth/login", rateLimit(ctx, RULES.adminLogin), async (req, res) => {
     const { email, password } = AdminLoginBody.parse(req.body);
     const admin = await ctx.prisma.superAdmin.findUnique({ where: { email: normalizeEmail(email) } });
     if (admin) assertNotLocked(admin);
@@ -100,7 +101,7 @@ export function adminAuthRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
   });
 
   /** First sign-in: prove the authenticator app has the secret, then it is saved. */
-  router.post("/admin/auth/setup-2fa", async (req, res) => {
+  router.post("/admin/auth/setup-2fa", rateLimit(ctx, RULES.adminCode), async (req, res) => {
     const { token, code } = AdminCodeBody.parse(req.body);
     const claims = await verifyAdminToken(token, secret, ctx.now(), "setup");
     const totp = claims?.tse ? decryptTotpSecret(claims.tse, secret) : null;
@@ -118,7 +119,7 @@ export function adminAuthRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.json(await signedIn(req, res, saved));
   });
 
-  router.post("/admin/auth/verify", async (req, res) => {
+  router.post("/admin/auth/verify", rateLimit(ctx, RULES.adminCode), async (req, res) => {
     const { token, code } = AdminCodeBody.parse(req.body);
     const now = ctx.now();
     const claims = await verifyAdminToken(token, secret, now, "mfa");
@@ -159,12 +160,12 @@ export function adminAuthRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     return row;
   }
 
-  router.get("/admin/auth/invite/:token", async (req, res) => {
+  router.get("/admin/auth/invite/:token", rateLimit(ctx, RULES.token), async (req, res) => {
     const row = await adminToken(String(req.params.token));
     res.json({ email: row.admin.email, name: row.admin.name });
   });
 
-  router.post("/admin/auth/accept", async (req, res) => {
+  router.post("/admin/auth/accept", rateLimit(ctx, RULES.token), async (req, res) => {
     const { token, password } = AdminAcceptBody.parse(req.body);
     const row = await adminToken(token);
     const now = ctx.now();

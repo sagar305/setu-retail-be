@@ -14,6 +14,8 @@ const schema = z
     /** Comma-separated list of browser origins allowed to call the API. */
     CORS_ORIGINS: z.string().default("http://localhost:5173"),
     LOG_LEVEL: z.enum(LOG_LEVELS).default("info"),
+    /** Database connections per API instance (Vercel runs many instances). */
+    DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
     /** Signs access tokens. 32+ random characters. */
     JWT_SECRET: z.string().min(32).default(DEV_JWT_SECRET),
     /** Decrypts SETU-R license keys; the same value as on setutechnology.com. */
@@ -25,6 +27,14 @@ const schema = z
     MAIL_FROM: z.string().default("Setu Retail <no-reply@setutechnology.com>"),
     /** Vercel Cron sends it as a bearer token to /internal/cron/*. Without it, the daily reminder job is off. */
     CRON_SECRET: z.string().min(16).optional(),
+    /** Limits on sign-in, sign-up and email endpoints. "off" only for tests. */
+    RATE_LIMITS: z.enum(["on", "off"]).default("on"),
+    /**
+     * When the web app reaches the API through its own address under a path
+     * (e.g. Vercel rewrite /api/* → the API), the browser sees the cookies
+     * under that path: set "/api". Empty when the API has its own domain.
+     */
+    COOKIE_PATH_PREFIX: z.string().regex(/^(\/[a-z0-9-]+)?$/, "Use a path like /api, or leave empty.").default(""),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;

@@ -118,4 +118,51 @@ describe.skipIf(!TEST_DB)("offline sync (Postgres)", () => {
     expect((await pack()).status).toBe(401);
     expect((await pack(r.body.deviceKey)).status).toBe(200);
   });
+
+  it("bills arriving out of order all save and the counter continues after the highest", async () => {
+    const bills = [3, 1, 2].map((n) => bill({ invoiceNumber: `B1-C1-0000${n}` }));
+    const r = await push(bills);
+    expect(r.body.results.map((x: { status: string }) => x.status)).toEqual(["saved", "saved", "saved"]);
+    expect((await db().counter.findUniqueOrThrow({ where: { id: counter.id } })).nextInvoiceNumber).toBe(4);
+  });
+
+  it("the same bill sent twice at once is saved once", async () => {
+    const b = bill();
+    const [a, c] = await Promise.all([push([b]), push([b])]);
+    const statuses = [a.body.results[0].status, c.body.results[0].status].sort();
+    // One wins; the other is told it's a duplicate, or to try again (and then hears duplicate).
+    expect(statuses[1]).toBe("saved");
+    expect(["duplicate", "retry"]).toContain(statuses[0]);
+    expect((await push([b])).body.results[0].status).toBe("duplicate");
+    expect(await db().order.count()).toBe(1);
+    expect((await db().branchProduct.findFirstOrThrow({ where: { productId: tea } })).stockMilli).toBe(-1000);
+  });
+
+  it("one bad bill in a batch doesn't stop the others", async () => {
+    const good = bill({ invoiceNumber: "B1-C1-00001" });
+    const badNumber = bill({ invoiceNumber: "B9-C9-00001" });
+    const unknownProduct = bill({ invoiceNumber: "B1-C1-00002", lines: [{ productId: randomUUID(), name: "Ghost", hsn: "", unit: "pcs", unitPrice: 100, gstRateBp: 0, taxInclusive: true, qtyMilli: 1000 }], payments: [{ methodId: cash, amount: 100 }], total: 100 });
+    const garbage = { id: randomUUID(), nonsense: true };
+    const later = bill({ invoiceNumber: "B1-C1-00003" });
+    const r = await push([good, badNumber, unknownProduct, garbage, later]);
+    const byId = Object.fromEntries(r.body.results.map((x: { id: string; status: string }) => [x.id, x.status]));
+    expect(byId[good.id]).toBe("saved");
+    expect(byId[later.id]).toBe("saved");
+    expect(byId[badNumber.id]).toBe("rejected");
+    expect(byId[garbage.id]).toBe("rejected");
+    // Already charged: a product the server doesn't know becomes a plain line (no stock change).
+    expect(byId[unknownProduct.id]).toBe("saved");
+    const item = await db().orderItem.findFirstOrThrow({ where: { orderId: unknownProduct.id } });
+    expect(item).toMatchObject({ productId: null, name: "Ghost" });
+  });
+
+  it("a locked account can't sync, and syncs again once unlocked", async () => {
+    await db().account.updateMany({ data: { lockedBySetuAt: new Date() } });
+    const r = await push([bill()]);
+    expect(r.status).toBe(403);
+    expect(r.body.error.code).toBe("account_locked");
+    expect((await pack()).status).toBe(403);
+    await db().account.updateMany({ data: { lockedBySetuAt: null } });
+    expect((await push([bill()])).body.results[0].status).toBe("saved");
+  });
 });

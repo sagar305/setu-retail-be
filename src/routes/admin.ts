@@ -14,6 +14,7 @@ import { AddDaysBody, AdminCreateBody, BulkRemindBody, IssueKeyBody, LockBody, U
 import { audit } from "../services/audit.js";
 import { DAY_MS } from "../services/planTimeline.js";
 import { loadSegments, planState, usage } from "../services/plans.js";
+import { pruneRateLimits } from "../services/rateLimit.js";
 import { sendAutomaticReminders, sendBulkReminders, sendReminderNow } from "../services/reminders.js";
 import { reconcileWithinPlan } from "../services/withinPlan.js";
 import { adminDto, sendAdminLink } from "./adminAuth.js";
@@ -116,7 +117,10 @@ export function adminRouter(ctx: Ctx): Router {
   router.get("/internal/cron/reminders", async (req, res) => {
     const expected = ctx.env.CRON_SECRET;
     if (!expected || req.get("authorization") !== `Bearer ${expected}`) throw new AppError(401, "unauthorized", "Not allowed.");
-    res.json(await sendAutomaticReminders(ctx));
+    const reminders = await sendAutomaticReminders(ctx);
+    // Daily housekeeping rides on the same job.
+    await pruneRateLimits(ctx);
+    res.json(reminders);
   });
 
   router.use("/admin", authenticateAdmin(ctx));

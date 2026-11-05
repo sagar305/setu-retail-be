@@ -445,6 +445,17 @@ model ExpiryReminder {
   @@map("expiry_reminders")
 }
 
+/// Attempt counters for sign-in, sign-up and email endpoints (fixed windows).
+/// `key` is a SHA-256 of the rule and who it counts (IP or email), never the raw value.
+model RateLimit {
+  key     String   @id
+  count   Int
+  resetAt DateTime @db.Timestamptz(3)
+
+  @@index([resetAt])
+  @@map("rate_limits")
+}
+
 // ─── Catalogue & stock ──────────────────────────────────────────────────────
 // Quantities are integer thousandths ("milli") so 1.5 kg = 1500; money is paise.
 

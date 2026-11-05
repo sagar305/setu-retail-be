@@ -243,6 +243,16 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **Admin log:** every Setu team action is logged on the Activity page.
 - **Free POS import:** the backup import listed for Phase 7 was already built in Phases 2b and 4a.
 
+**Hardening as built (Phase 8, decisions v1.8):**
+- **Rate limits** in Postgres, with no new service. They cover sign-in, sign-up, email links and admin sign-in, and add to the per-login lockout.
+- **Errors:** Vercel logs only, with no error service.
+- **Backups:** a nightly encrypted `pg_dump` kept as a GitHub Actions artifact for 90 days, on top of the provider's own backups. Restore guide: `docs/BACKUP-RESTORE.md`.
+- **Load target:** 200 shops, 500 counters, about 10 bills/s at peak. One API process handled 5× that.
+- **Contact-sales keys** start when the current paid plan ends, with no choice shown. On a trial or free days they start now.
+- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite, `COOKIE_PATH_PREFIX=/api`), so sign-in cookies are first-party.
+- **App build guard:** the app's production build fails without `VITE_API_URL`.
+- **Help:** an in-app Help page for owners and staff.
+
 ---
 
 ## 9. Open questions

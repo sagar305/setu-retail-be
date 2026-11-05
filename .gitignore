@@ -7,3 +7,4 @@ src/generated/
 .vercel/
 coverage/
 *.log
+load-seed.json
