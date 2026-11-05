@@ -1,5 +1,6 @@
 import type { Db } from "../db/types.js";
 import type { Plan } from "../generated/prisma/client.js";
+import { startOfMonth } from "../lib/time.js";
 import { timelineState, type Segment, type TimelineState } from "./planTimeline.js";
 
 export type Limits = Pick<Plan, "maxBranches" | "maxStaff" | "maxProducts" | "maxCustomers" | "maxOrdersPerMonth">;
@@ -53,11 +54,16 @@ export const addMonths = (date: Date, months: number): Date => {
   return d;
 };
 
-/** Counts that plan limits apply to. Products, customers and orders arrive in Phase 2. */
-export async function usage(db: Db, accountId: string) {
-  const [branches, staff] = await Promise.all([
+/** Counts that plan limits apply to. */
+export async function usage(db: Db, accountId: string, now: Date = new Date()) {
+  const account = await db.account.findUnique({ where: { id: accountId }, select: { timezone: true } });
+  const monthStart = startOfMonth(now, account?.timezone ?? "Asia/Kolkata");
+  const [branches, staff, products, customers, ordersThisMonth] = await Promise.all([
     db.branch.count({ where: { accountId, archivedAt: null } }),
     db.user.count({ where: { accountId, role: { not: "OWNER" }, status: { not: "DISABLED" } } }),
+    db.product.count({ where: { accountId, archivedAt: null } }),
+    db.customer.count({ where: { accountId, archivedAt: null } }),
+    db.order.count({ where: { accountId, createdAt: { gte: monthStart } } }),
   ]);
-  return { branches, staff, products: 0, customers: 0, ordersThisMonth: 0 };
+  return { branches, staff, products, customers, ordersThisMonth };
 }

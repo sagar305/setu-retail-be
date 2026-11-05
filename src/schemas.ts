@@ -102,7 +102,7 @@ export const PlanDto = z.object({
     .object({
       code: z.string(),
       name: z.string(),
-      source: z.enum(["TRIAL", "KEY"]),
+      source: z.enum(["TRIAL", "KEY", "GRANT"]),
       startsAt: z.iso.datetime(),
       endsAt: z.iso.datetime(),
       limits: LimitsDto,

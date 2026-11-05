@@ -8,7 +8,7 @@ export type Segment = {
   planCode: string;
   /** Monthly INR price in paise; null for custom plans. */
   monthlyPriceInr: number | null;
-  source: "TRIAL" | "KEY";
+  source: "TRIAL" | "KEY" | "GRANT";
   startsAt: Date;
   endsAt: Date;
 };

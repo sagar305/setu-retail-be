@@ -130,13 +130,15 @@ export async function persistOrder(tx: Db, a: PersistArgs): Promise<FullOrder> {
     include: orderInclude,
   });
 
+  // Stock moves when the server takes the bill (a synced offline bill: at sync).
+  const movedAt = a.syncedAt ?? a.createdAt;
   for (const [productId, qty] of need) {
     if (!a.blockBelowZero) {
-      await moveStock(tx, { accountId: account.id, branchId: branch.id, productId, change: -qty, type: "SALE", refId: created.id, userId: a.cashierId, note: a.offline ? "Offline bill" : "" });
+      await moveStock(tx, { at: movedAt, accountId: account.id, branchId: branch.id, productId, change: -qty, type: "SALE", refId: created.id, userId: a.cashierId, note: a.offline ? "Offline bill" : "" });
     } else {
       // Stock was already taken above; just log it.
       const after = (await tx.branchProduct.findUniqueOrThrow({ where: { branchId_productId: { branchId: branch.id, productId } } })).stockMilli;
-      await tx.inventoryLog.create({ data: { accountId: account.id, branchId: branch.id, productId, type: "SALE", changeMilli: -qty, stockAfterMilli: after, refId: created.id, userId: a.cashierId } });
+      await tx.inventoryLog.create({ data: { accountId: account.id, branchId: branch.id, productId, type: "SALE", changeMilli: -qty, stockAfterMilli: after, refId: created.id, userId: a.cashierId, createdAt: movedAt } });
     }
   }
 

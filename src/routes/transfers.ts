@@ -148,7 +148,7 @@ export function transfersRouter(ctx: Ctx): Router {
       await tx.stockTransfer.create({ data: { id: body.id, accountId: a.account.id, number, fromBranchId: from.id, toBranchId: to.id, note: body.note ?? "", sentById: a.user.id, sentAt: now } });
       for (const p of products) {
         const q = qty.get(p.id)!;
-        await moveStock(tx, { accountId: a.account.id, branchId: from.id, productId: p.id, change: -q, type: "TRANSFER_OUT", refId: body.id, note: `${number} to ${to.code}`, userId: a.user.id });
+        await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: from.id, productId: p.id, change: -q, type: "TRANSFER_OUT", refId: body.id, note: `${number} to ${to.code}`, userId: a.user.id });
         const item = await tx.stockTransferItem.create({ data: { transferId: body.id, productId: p.id, name: p.name, unit: p.unit, qtyMilli: q, unitCost: p.costPrice } });
         if (!a.account.batchTracking) continue;
         // The batches it leaves from: the ones picked, else earliest expiry first.
@@ -184,7 +184,7 @@ export function transfersRouter(ctx: Ctx): Router {
   /** Put stock back into the sending branch (and its batches). */
   async function backToSender(tx: Db, a: AuthContext, t: Full, item: Full["items"][number], qtyMilli: number, note: string) {
     if (qtyMilli <= 0) return;
-    await moveStock(tx, { accountId: a.account.id, branchId: t.fromBranchId, productId: item.productId, change: qtyMilli, type: "TRANSFER_RETURN", refId: t.id, note, userId: a.user.id });
+    await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: t.fromBranchId, productId: item.productId, change: qtyMilli, type: "TRANSFER_RETURN", refId: t.id, note, userId: a.user.id });
     if (!a.account.batchTracking) return;
     // Back into the batches it came from; anything without a batch goes to the catch-all.
     for (const { batch, qtyMilli: q } of splitBatches(sortFefo(item.batches.map((b) => ({ ...b, receivedAt: new Date(0) }))).reverse(), qtyMilli)) {
@@ -222,7 +222,7 @@ export function transfersRouter(ctx: Ctx): Router {
         const missing = i.qtyMilli - got;
         await tx.stockTransferItem.update({ where: { id: i.id }, data: { receivedMilli: got, returnedMilli: g?.short === "RETURN" ? missing : 0, writtenOffMilli: g?.short === "WRITE_OFF" ? missing : 0 } });
         if (got > 0) {
-          await moveStock(tx, { accountId: a.account.id, branchId: to.id, productId: i.productId, change: got, type: "TRANSFER_IN", refId: t.id, note: `${t.number} from ${fromCode}`, userId: a.user.id });
+          await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: to.id, productId: i.productId, change: got, type: "TRANSFER_IN", refId: t.id, note: `${t.number} from ${fromCode}`, userId: a.user.id });
           if (a.account.batchTracking) {
             // Same batch number, expiry and cost arrive, earliest expiry first.
             for (const { batch, qtyMilli } of splitBatches(sortFefo(i.batches.map((b) => ({ ...b, receivedAt: new Date(0) }))), got)) {

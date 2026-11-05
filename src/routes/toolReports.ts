@@ -159,10 +159,10 @@ export function toolReportsRouter(ctx: Ctx): Router {
       ctx.prisma.product.findMany({ where: { accountId: a.account.id, trackStock: true, archivedAt: null }, select: { id: true, name: true, sku: true, unit: true, costPrice: true }, orderBy: { name: "asc" } }),
       ctx.prisma.$queryRaw<{ productId: string; stock: number }[]>`
         SELECT DISTINCT ON ("productId") "productId", "stockAfterMilli" AS stock FROM "inventory_logs"
-        WHERE "branchId" = ${branch.id}::uuid AND "createdAt" < ${start} ORDER BY "productId", "createdAt" DESC, "id" DESC`,
+        WHERE "branchId" = ${branch.id}::uuid AND "createdAt" < ${start} ORDER BY "productId", "createdAt" DESC, "seq" DESC`,
       ctx.prisma.$queryRaw<{ productId: string; stock: number }[]>`
         SELECT DISTINCT ON ("productId") "productId", "stockAfterMilli" AS stock FROM "inventory_logs"
-        WHERE "branchId" = ${branch.id}::uuid AND "createdAt" < ${end} ORDER BY "productId", "createdAt" DESC, "id" DESC`,
+        WHERE "branchId" = ${branch.id}::uuid AND "createdAt" < ${end} ORDER BY "productId", "createdAt" DESC, "seq" DESC`,
       ctx.prisma.inventoryLog.groupBy({ by: ["productId", "type"], where: { branchId: branch.id, createdAt: { gte: start, lt: end } }, _sum: { changeMilli: true } }),
     ]);
     const open = new Map(before.map((r) => [r.productId, n(r.stock)]));

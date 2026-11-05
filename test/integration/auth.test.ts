@@ -78,9 +78,10 @@ describe.skipIf(!TEST_DB)("auth (Postgres)", () => {
 
   it("refresh rotates the cookie; replaying the old one revokes the session", async () => {
     const owner = await signUpOwner(h);
-    const { agent, cookie: original } = await signIn(h, owner.username);
+    const { cookie: original } = await signIn(h, owner.username);
 
-    const first = await agent.post("/auth/refresh").set("Origin", APP_ORIGIN);
+    // Cookies are sent by hand: the test clock is in the past, so a cookie jar would drop them as expired.
+    const first = await request(h.app).post("/auth/refresh").set("Origin", APP_ORIGIN).set("Cookie", original);
     expect(first.status).toBe(200);
     const rotated = (first.headers["set-cookie"] as unknown as string[])[0]!.split(";")[0]!;
     expect(rotated).not.toBe(original);
@@ -96,11 +97,13 @@ describe.skipIf(!TEST_DB)("auth (Postgres)", () => {
 
   it("ends the session after one 12-hour shift", async () => {
     const owner = await signUpOwner(h);
-    const { agent, as } = await signIn(h, owner.username);
+    const { cookie, as } = await signIn(h, owner.username);
     h.clock.now = new Date(h.clock.now.getTime() + 11 * 3600_000);
-    expect((await agent.post("/auth/refresh")).status).toBe(200);
+    const ok = await request(h.app).post("/auth/refresh").set("Cookie", cookie);
+    expect(ok.status).toBe(200);
+    const rotated = (ok.headers["set-cookie"] as unknown as string[])[0]!.split(";")[0]!;
     h.clock.now = new Date(h.clock.now.getTime() + 2 * 3600_000);
-    const late = await agent.post("/auth/refresh");
+    const late = await request(h.app).post("/auth/refresh").set("Cookie", rotated);
     expect(late.status).toBe(401);
     expect(late.body.error.code).toBe("session_ended");
     expect((await as("get", "/me")).status).toBe(401);
@@ -115,10 +118,10 @@ describe.skipIf(!TEST_DB)("auth (Postgres)", () => {
 
   it("logout ends the session", async () => {
     const owner = await signUpOwner(h);
-    const { agent, as } = await signIn(h, owner.username);
-    expect((await agent.post("/auth/logout")).status).toBe(204);
+    const { cookie, as } = await signIn(h, owner.username);
+    expect((await request(h.app).post("/auth/logout").set("Cookie", cookie)).status).toBe(204);
     expect((await as("get", "/me")).status).toBe(401);
-    expect((await agent.post("/auth/refresh")).status).toBe(401);
+    expect((await request(h.app).post("/auth/refresh").set("Cookie", cookie)).status).toBe(401);
   });
 
   it("password reset sets a new password and signs out every device", async () => {

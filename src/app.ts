@@ -10,6 +10,8 @@ import { AppError, errorHandler, notFound } from "./http/errors.js";
 import { LogMailer, type Mailer } from "./mail/mailer.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { accountRouter } from "./routes/account.js";
+import { adminRouter } from "./routes/admin.js";
+import { adminAuthRouter } from "./routes/adminAuth.js";
 import { authRouter } from "./routes/auth.js";
 import { branchesRouter } from "./routes/branches.js";
 import { healthRouter } from "./routes/health.js";
@@ -77,6 +79,8 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
   if (prisma) {
     const ctx: Ctx = { env, prisma, mailer: mailer ?? new LogMailer(), now: now ?? (() => new Date()) };
     app.use(authRouter(ctx, allowed));
+    app.use(adminAuthRouter(ctx, allowed));
+    app.use(adminRouter(ctx));
     app.use(accountRouter(ctx));
     app.use(branchesRouter(ctx));
     app.use(staffRouter(ctx));
@@ -94,7 +98,7 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(purchasesRouter(ctx));
     app.use(syncRouter(ctx));
   } else {
-    app.use(["/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates", "/transfers", "/audit-log"], (_req, _res, next) =>
+    app.use(["/admin", "/internal", "/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates", "/transfers", "/audit-log"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }

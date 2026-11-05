@@ -39,6 +39,8 @@ model Plan {
 enum SubscriptionSource {
   TRIAL
   KEY
+  /// Free days added by the Setu team (super-admin).
+  GRANT
 }
 
 /// A period during which an account is on a plan. An account's timeline is
@@ -117,6 +119,8 @@ model Account {
   keepActiveReviewPending Boolean   @default(false)
   /// Set by Setu (super-admin); blocks everyone.
   lockedBySetuAt          DateTime? @db.Timestamptz(3)
+  /// Why the Setu team locked it. Shown only to the Setu team.
+  lockReason              String?
 
   // ── POS settings (owner) ──
   /// Charge GST on bills. On for accounts that signed up with a GSTIN.
@@ -152,6 +156,8 @@ model Account {
   paymentMethods PaymentMethod[]
   orders         Order[]
   suppliers      Supplier[]
+  issuedKeys     IssuedKey[]
+  reminders      ExpiryReminder[]
 
   @@map("accounts")
 }
@@ -318,6 +324,127 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+// ─── Setu team (super-admin) ────────────────────────────────────────────────
+// Separate from shop users: own logins, password + authenticator code (TOTP).
+
+enum AdminStatus {
+  /// Invited; has not set a password yet.
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+model SuperAdmin {
+  id            String      @id @default(uuid()) @db.Uuid
+  /// Stored lower-case.
+  email         String      @unique
+  name          String
+  status        AdminStatus @default(INVITED)
+  passwordHash  String?
+  /// TOTP secret, AES-GCM encrypted (see lib/totp.ts). Null until 2FA is set up.
+  totpSecretEnc String?
+  /// Last TOTP time step accepted, so a code can't be used twice.
+  totpLastStep  Int?
+  failedLogins  Int         @default(0)
+  lockedUntil   DateTime?   @db.Timestamptz(3)
+  lastLoginAt   DateTime?   @db.Timestamptz(3)
+  createdById   String?     @db.Uuid
+  createdAt     DateTime    @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @db.Timestamptz(3)
+
+  sessions AdminSession[]
+  tokens   AdminToken[]
+
+  @@map("super_admins")
+}
+
+model AdminSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  adminId          String    @db.Uuid
+  refreshTokenHash String    @unique
+  previousHash     String?   @unique
+  expiresAt        DateTime  @db.Timestamptz(3)
+  revokedAt        DateTime? @db.Timestamptz(3)
+  userAgent        String    @default("")
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  lastUsedAt       DateTime  @default(now()) @db.Timestamptz(3)
+
+  admin SuperAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("admin_sessions")
+}
+
+/// Emailed invite / reset links for the Setu team. Only a SHA-256 is stored.
+model AdminToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  adminId   String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  admin SuperAdmin @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("admin_tokens")
+}
+
+/// Everything the Setu team does. Kept (not pruned with shop audit logs).
+model AdminAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  /// Null for actions by the system (automatic reminders) or a failed sign-in by an unknown email.
+  adminId   String?  @db.Uuid
+  adminName String   @default("")
+  action    String
+  accountId String?  @db.Uuid
+  data      Json?
+  ip        String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([accountId, createdAt])
+  @@index([adminId, createdAt])
+  @@map("admin_audit_logs")
+}
+
+/// A Contact-sales key issued by the Setu team. Works only on its account.
+model IssuedKey {
+  id         String    @id @default(uuid()) @db.Uuid
+  keyId      String    @unique
+  accountId  String    @db.Uuid
+  planId     String    @db.Uuid
+  days       Int
+  note       String    @default("")
+  issuedById String    @db.Uuid
+  issuedAt   DateTime  @default(now()) @db.Timestamptz(3)
+  /// Cancelled before it was redeemed (e.g. typed wrong); it then cannot be redeemed.
+  revokedAt  DateTime? @db.Timestamptz(3)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([issuedAt])
+  @@map("issued_keys")
+}
+
+/// "Your plan ends soon" emails. Automatic ones are sent once per end date and step (14, 7, 1 days).
+model ExpiryReminder {
+  id        String   @id @default(uuid()) @db.Uuid
+  accountId String   @db.Uuid
+  /// The end of the account's plan timeline this reminder was about.
+  endsAt    DateTime @db.Timestamptz(3)
+  /// 14, 7 or 1 for automatic reminders; 0 when sent by hand.
+  step      Int
+  adminId   String?  @db.Uuid
+  sentAt    DateTime @default(now()) @db.Timestamptz(3)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, endsAt, step])
+  @@map("expiry_reminders")
+}
+
 // ─── Catalogue & stock ──────────────────────────────────────────────────────
 // Quantities are integer thousandths ("milli") so 1.5 kg = 1500; money is paise.
 
@@ -423,6 +550,8 @@ model InventoryLog {
   refId           String?         @db.Uuid
   userId          String?         @db.Uuid
   createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  /// Always increasing: orders movements made in the same millisecond.
+  seq             BigInt          @default(autoincrement())
 
   @@index([branchId, productId, createdAt])
   @@map("inventory_logs")

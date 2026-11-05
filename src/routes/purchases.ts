@@ -92,7 +92,7 @@ export const effectiveCost = (account: Pick<Account, "taxEnabled">, unitCost: nu
 
 /** Take stock out, from `batchId` first when given, keeping batches equal to stock. */
 async function takeOut(tx: Db, a: { accountId: string; branchId: string; productId: string; qtyMilli: number; batchId: string | null; batchTracking: boolean; type: "PURCHASE_RETURN" | "PURCHASE_CANCEL"; refId: string; note: string; userId: string; now: Date }) {
-  const stock = await moveStock(tx, { accountId: a.accountId, branchId: a.branchId, productId: a.productId, change: -a.qtyMilli, type: a.type, refId: a.refId, note: a.note, userId: a.userId });
+  const stock = await moveStock(tx, { at: a.now, accountId: a.accountId, branchId: a.branchId, productId: a.productId, change: -a.qtyMilli, type: a.type, refId: a.refId, note: a.note, userId: a.userId });
   if (!a.batchTracking) return;
   if (a.batchId) {
     const b = await tx.batch.findUnique({ where: { id: a.batchId } });
@@ -198,6 +198,7 @@ export function purchasesRouter(ctx: Ctx): Router {
           paidMethodName: method?.name ?? "",
           paidKind: method?.kind ?? null,
           notes: body.notes ?? "",
+          createdAt: ctx.now(),
           userId: a.user.id,
         },
       });
@@ -208,7 +209,7 @@ export function purchasesRouter(ctx: Ctx): Router {
         const cost = effectiveCost(account, l.unitCost, l.gstRateBp);
         let batchId: string | null = null;
         if (p?.trackStock) {
-          await moveStock(tx, { accountId: account.id, branchId: branch.id, productId: p.id, change: l.qtyMilli, type: "PURCHASE", refId: body.id, note: `Bill ${body.billNumber} · ${supplier.name}`, userId: a.user.id });
+          await moveStock(tx, { at: ctx.now(), accountId: account.id, branchId: branch.id, productId: p.id, change: l.qtyMilli, type: "PURCHASE", refId: body.id, note: `Bill ${body.billNumber} · ${supplier.name}`, userId: a.user.id });
           if (account.batchTracking) {
             const b = await tx.batch.create({
               data: { accountId: account.id, branchId: branch.id, productId: p.id, batchNo: l.batchNo ?? "", expiry: l.expiry ? fromDay(l.expiry) : null, costPrice: cost, qtyMilli: l.qtyMilli, note: `Bill ${body.billNumber}`, receivedAt: now },
@@ -337,7 +338,7 @@ export function purchasesRouter(ctx: Ctx): Router {
       for (const x of r.items) {
         if (!x.productId || !tracked.has(x.productId) || !p.stockApplied) continue;
         const orig = p.items.find((i) => i.id === x.purchaseItemId);
-        await moveStock(tx, { accountId: a.account.id, branchId: r.branchId, productId: x.productId, change: x.qtyMilli, type: "REPLACEMENT", refId: r.id, note: `Replacement · bill ${p.billNumber}`, userId: a.user.id });
+        await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: r.branchId, productId: x.productId, change: x.qtyMilli, type: "REPLACEMENT", refId: r.id, note: `Replacement · bill ${p.billNumber}`, userId: a.user.id });
         if (a.account.batchTracking) {
           const expiry = body.expiry === undefined ? (orig?.expiry ?? null) : body.expiry ? fromDay(body.expiry) : null;
           await tx.batch.create({

@@ -23,6 +23,8 @@ const schema = z
     /** Resend API key. Without it, emails are written to the log instead (dev only). */
     RESEND_API_KEY: z.string().min(1).optional(),
     MAIL_FROM: z.string().default("Setu Retail <no-reply@setutechnology.com>"),
+    /** Vercel Cron sends it as a bearer token to /internal/cron/*. Without it, the daily reminder job is off. */
+    CRON_SECRET: z.string().min(16).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== "production") return;

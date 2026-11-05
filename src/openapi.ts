@@ -8,6 +8,7 @@ import * as F from "./schemas4.js";
 import { ReceiveBody, TransferBody, TransferDto } from "./routes/transfers.js";
 import { AuditEntryDto, BranchComparisonDto, StockAcrossDto, TransferReportDto } from "./routes/branchReports.js";
 import { BarcodeGenerateBody, BranchReceiptBody, ReceiptTemplateBody, ReceiptTemplateDto } from "./routes/receipts.js";
+import * as A from "./schemasAdmin.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
@@ -356,6 +357,44 @@ for (const [method, path, summary, body, ok] of [
   const Entry = registry.register("AuditEntry", AuditEntryDto);
   route("get", "/audit-log", "Audit log (?from=&to=&branchId=&userId=&action= prefix, &before= cursor, &limit=); managers see their branches", { tag: t, ok: z.object({ entries: z.array(Entry), next: z.string().nullable() }) });
   route("get", "/audit-log/filters", "Actions and people for the audit log filters", { tag: t, ok: z.object({ actions: z.array(z.string()), users: z.array(z.object({ id: z.string(), name: z.string(), role: z.string() })) }) });
+}
+
+// ── Phase 7: Setu team (super-admin) ──
+{
+  const t = "super-admin";
+  const Admin = registry.register("SuperAdmin", A.AdminDto);
+  const AdminSession = registry.register("AdminSession", A.AdminSessionDto);
+  const Ok = (k: string) => z.object({ [k]: z.boolean() });
+  route("post", "/admin/auth/login", "Admin sign-in, step 1: email + password → code step (or authenticator setup on first sign-in)", { tag: t, body: A.AdminLoginBody, ok: registry.register("AdminLoginStep", A.AdminLoginStep), secure: false });
+  route("post", "/admin/auth/setup-2fa", "Admin sign-in, first time: confirm the authenticator app with a code", { tag: t, body: A.AdminCodeBody, ok: AdminSession, secure: false });
+  route("post", "/admin/auth/verify", "Admin sign-in, step 2: authenticator code", { tag: t, body: A.AdminCodeBody, ok: AdminSession, secure: false });
+  route("post", "/admin/auth/refresh", "New admin access token from the refresh cookie", { tag: t, ok: AdminSession, secure: false });
+  route("post", "/admin/auth/logout", "End the admin session", { tag: t, ok: null, status: 204, secure: false });
+  route("get", "/admin/auth/invite/{token}", "Who an admin invite / reset link is for", { tag: t, ok: z.object({ email: z.string(), name: z.string() }), secure: false });
+  route("post", "/admin/auth/accept", "Set an admin password from an invite / reset link", { tag: t, body: A.AdminAcceptBody, ok: z.object({ accepted: z.boolean(), email: z.string() }), secure: false });
+  route("get", "/admin/me", "The signed-in admin", { tag: t, ok: z.object({ admin: Admin }) });
+  route("get", "/admin/dashboard", "Totals: accounts, trial, paying by plan, expiring, sign-ups", { tag: t, ok: registry.register("AdminDashboard", A.DashboardDto) });
+  const Row = registry.register("AdminAccountRow", A.AccountRowDto);
+  route("get", "/admin/accounts", "Accounts (?q=&status=trial|paid|granted|expired|unverified|locked&expiring=days&limit=&offset=)", { tag: t, ok: z.object({ accounts: z.array(Row), total: z.number().int() }) });
+  route("get", "/admin/accounts/{id}", "One account: plan, usage vs limits, timeline, keys, reminders, Setu activity (counts only)", { tag: t, ok: registry.register("AdminAccountDetail", A.AccountDetailDto) });
+  route("post", "/admin/accounts/{id}/lock", "Lock an account (reason kept for the Setu team only)", { tag: t, body: A.LockBody, ok: Ok("locked") });
+  route("post", "/admin/accounts/{id}/unlock", "Unlock an account", { tag: t, body: A.UnlockBody, ok: Ok("locked") });
+  route("post", "/admin/accounts/{id}/add-days", "Add free days of the current (or last) plan, after the timeline", { tag: t, body: A.AddDaysBody, ok: z.object({ planCode: z.string(), startsAt: z.string(), endsAt: z.string() }) });
+  route("post", "/admin/accounts/{id}/resend-verification", "Email the owner a new verification link", { tag: t, ok: z.object({ sent: z.boolean(), to: z.string() }) });
+  route("post", "/admin/accounts/{id}/send-reset", "Email the owner a password reset link", { tag: t, ok: z.object({ sent: z.boolean(), to: z.string() }) });
+  route("post", "/admin/accounts/{id}/remind", "Email the owner a plan-ending (or ended) reminder now", { tag: t, ok: Ok("sent") });
+  route("post", "/admin/reminders", "Remind everyone whose plan ends within N days (skips anyone reminded in the last 24 h)", { tag: t, body: A.BulkRemindBody, ok: z.object({ sent: z.number().int(), skipped: z.number().int() }) });
+  route("post", "/admin/keys", "Issue a Contact-sales key (>100 branches) for one account; shown once and emailed to the owner", { tag: t, body: A.IssueKeyBody, ok: z.object({ id: z.string(), key: z.string(), emailedTo: z.string().nullable(), redeemUrl: z.string() }), status: 201 });
+  route("post", "/admin/keys/{id}/revoke", "Cancel an issued key that hasn't been redeemed", { tag: t, ok: Ok("revoked") });
+  route("get", "/admin/keys", "Issued Contact-sales keys", { tag: t, ok: z.object({ keys: z.array(registry.register("IssuedKey", A.IssuedKeyRowDto)) }) });
+  route("get", "/admin/redemptions", "All redeemed keys, newest first (?before= cursor)", { tag: t, ok: z.object({ redemptions: z.array(registry.register("AdminRedemption", A.RedemptionRowDto)), next: z.string().nullable() }) });
+  route("get", "/admin/activity", "What the Setu team did (?adminId=&accountId=&action= prefix&before=)", { tag: t, ok: z.object({ entries: z.array(registry.register("AdminActivity", A.AdminActivityDto)), next: z.string().nullable() }) });
+  route("get", "/admin/admins", "The Setu team", { tag: t, ok: z.object({ admins: z.array(Admin) }) });
+  route("post", "/admin/admins", "Invite a Setu team member (emails a set-password link)", { tag: t, body: A.AdminCreateBody, ok: z.object({ admin: Admin }), status: 201 });
+  route("post", "/admin/admins/{id}/reset", "Reset another admin's password and authenticator app", { tag: t, ok: z.object({ admin: Admin }) });
+  route("post", "/admin/admins/{id}/disable", "Turn another admin off", { tag: t, ok: z.object({ admin: Admin }) });
+  route("post", "/admin/admins/{id}/enable", "Turn an admin back on (sends a new set-password link)", { tag: t, ok: z.object({ admin: Admin }) });
+  route("get", "/internal/cron/reminders", "Daily job: plan-ending emails at 14, 7 and 1 days (Bearer CRON_SECRET)", { tag: t, ok: z.object({ sent: z.number().int(), checked: z.number().int() }), secure: false });
 }
 
 export function buildOpenApiDocument(version: string) {

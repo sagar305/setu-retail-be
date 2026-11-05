@@ -278,7 +278,7 @@ export function ordersRouter(ctx: Ctx): Router {
       if (r.count === 0) throw new AppError(409, "already_cancelled", "This bill is already cancelled.");
       for (const i of o.items) {
         if (i.productId && tracked.has(i.productId)) {
-          await moveStock(tx, { accountId: a.account.id, branchId: o.branchId, productId: i.productId, change: i.qtyMilli, type: "CANCEL", refId: o.id, userId: a.user.id, note: `Cancelled ${o.invoiceNumber}` });
+          await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: o.branchId, productId: i.productId, change: i.qtyMilli, type: "CANCEL", refId: o.id, userId: a.user.id, note: `Cancelled ${o.invoiceNumber}` });
           await restoreToBatches(tx, i.id, i.qtyMilli);
         }
       }
@@ -346,7 +346,7 @@ export function ordersRouter(ctx: Ctx): Router {
       });
       for (const l of lines) {
         if (l.item.productId && tracked.has(l.item.productId)) {
-          await moveStock(tx, { accountId: a.account.id, branchId: branch.id, productId: l.item.productId, change: l.qtyMilli, type: "RETURN", refId: cn.id, userId: a.user.id, note: cn.number });
+          await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: branch.id, productId: l.item.productId, change: l.qtyMilli, type: "RETURN", refId: cn.id, userId: a.user.id, note: cn.number });
           await restoreToBatches(tx, l.item.id, l.qtyMilli);
         }
       }

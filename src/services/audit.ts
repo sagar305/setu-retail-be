@@ -18,6 +18,9 @@ export type AuditEntry = {
 const requestInfo = new AsyncLocalStorage<{ ip: string | null }>();
 export const auditContext: RequestHandler = (req, _res, next) => requestInfo.run({ ip: req.ip ?? null }, next);
 
+/** The current request's IP (null outside a request). */
+export const requestIp = (): string | null => requestInfo.getStore()?.ip ?? null;
+
 export async function audit(db: Db, entry: AuditEntry): Promise<void> {
   await db.auditLog.create({
     data: {

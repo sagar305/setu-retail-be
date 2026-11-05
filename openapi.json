@@ -227,7 +227,8 @@
                     "type": "string",
                     "enum": [
                       "TRIAL",
-                      "KEY"
+                      "KEY",
+                      "GRANT"
                     ]
                   },
                   "startsAt": {
@@ -493,7 +494,8 @@
                         "type": "string",
                         "enum": [
                           "TRIAL",
-                          "KEY"
+                          "KEY",
+                          "GRANT"
                         ]
                       },
                       "startsAt": {
@@ -757,7 +759,8 @@
                 "type": "string",
                 "enum": [
                   "TRIAL",
-                  "KEY"
+                  "KEY",
+                  "GRANT"
                 ]
               },
               "startsAt": {
@@ -6106,6 +6109,931 @@
           "branchId",
           "branchCode",
           "ip"
+        ]
+      },
+      "SuperAdmin": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INVITED",
+              "ACTIVE",
+              "DISABLED"
+            ]
+          },
+          "twoFactor": {
+            "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name",
+          "status",
+          "twoFactor",
+          "lastLoginAt",
+          "createdAt"
+        ]
+      },
+      "AdminSession": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer"
+          },
+          "admin": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "INVITED",
+                  "ACTIVE",
+                  "DISABLED"
+                ]
+              },
+              "twoFactor": {
+                "type": "boolean"
+              },
+              "lastLoginAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "email",
+              "name",
+              "status",
+              "twoFactor",
+              "lastLoginAt",
+              "createdAt"
+            ]
+          }
+        },
+        "required": [
+          "accessToken",
+          "expiresIn",
+          "admin"
+        ]
+      },
+      "AdminLoginStep": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "code"
+                ]
+              },
+              "token": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "step",
+              "token"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "step": {
+                "type": "string",
+                "enum": [
+                  "setup"
+                ]
+              },
+              "token": {
+                "type": "string"
+              },
+              "secret": {
+                "type": "string"
+              },
+              "otpauthUrl": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "step",
+              "token",
+              "secret",
+              "otpauthUrl"
+            ]
+          }
+        ]
+      },
+      "AdminDashboard": {
+        "type": "object",
+        "properties": {
+          "accounts": {
+            "type": "integer"
+          },
+          "trial": {
+            "type": "integer"
+          },
+          "paidByPlan": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "accounts": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "code",
+                "name",
+                "accounts"
+              ]
+            }
+          },
+          "granted": {
+            "type": "integer"
+          },
+          "expired": {
+            "type": "integer"
+          },
+          "unverified": {
+            "type": "integer"
+          },
+          "locked": {
+            "type": "integer"
+          },
+          "expiringIn14Days": {
+            "type": "integer"
+          },
+          "signupsThisMonth": {
+            "type": "integer"
+          },
+          "remindersLast7Days": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "accounts",
+          "trial",
+          "paidByPlan",
+          "granted",
+          "expired",
+          "unverified",
+          "locked",
+          "expiringIn14Days",
+          "signupsThisMonth",
+          "remindersLast7Days"
+        ]
+      },
+      "AdminAccountRow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "ownerName": {
+            "type": "string"
+          },
+          "ownerEmail": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "trial",
+              "paid",
+              "granted",
+              "expired",
+              "unverified",
+              "locked"
+            ]
+          },
+          "planCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "planName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endsAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "daysLeft": {
+            "type": "integer"
+          },
+          "branches": {
+            "type": "integer"
+          },
+          "lastActiveAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "phone",
+          "ownerName",
+          "ownerEmail",
+          "status",
+          "planCode",
+          "planName",
+          "endsAt",
+          "daysLeft",
+          "branches",
+          "lastActiveAt",
+          "createdAt"
+        ]
+      },
+      "AdminAccountDetail": {
+        "type": "object",
+        "properties": {
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "ownerName": {
+                "type": "string"
+              },
+              "ownerEmail": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "trial",
+                  "paid",
+                  "granted",
+                  "expired",
+                  "unverified",
+                  "locked"
+                ]
+              },
+              "planCode": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "planName": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "endsAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "daysLeft": {
+                "type": "integer"
+              },
+              "branches": {
+                "type": "integer"
+              },
+              "lastActiveAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "createdAt": {
+                "type": "string"
+              },
+              "taxNumber": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "timezone": {
+                "type": "string"
+              },
+              "lockedAt": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lockReason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "ownerVerified": {
+                "type": "boolean"
+              },
+              "ownerId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "phone",
+              "ownerName",
+              "ownerEmail",
+              "status",
+              "planCode",
+              "planName",
+              "endsAt",
+              "daysLeft",
+              "branches",
+              "lastActiveAt",
+              "createdAt",
+              "taxNumber",
+              "timezone",
+              "lockedAt",
+              "lockReason",
+              "ownerVerified",
+              "ownerId"
+            ]
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "expired": {
+                "type": "boolean"
+              },
+              "daysLeft": {
+                "type": "integer"
+              },
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "limits": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "properties": {
+                  "maxBranches": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxStaff": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxProducts": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxCustomers": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "maxOrdersPerMonth": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "maxBranches",
+                  "maxStaff",
+                  "maxProducts",
+                  "maxCustomers",
+                  "maxOrdersPerMonth"
+                ]
+              }
+            },
+            "required": [
+              "expired",
+              "daysLeft",
+              "code",
+              "name",
+              "source",
+              "limits"
+            ]
+          },
+          "usage": {
+            "type": "object",
+            "properties": {
+              "branches": {
+                "type": "integer"
+              },
+              "staff": {
+                "type": "integer"
+              },
+              "products": {
+                "type": "integer"
+              },
+              "customers": {
+                "type": "integer"
+              },
+              "ordersThisMonth": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "branches",
+              "staff",
+              "products",
+              "customers",
+              "ordersThisMonth"
+            ]
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "planCode": {
+                  "type": "string"
+                },
+                "planName": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "startsAt": {
+                  "type": "string"
+                },
+                "endsAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "planCode",
+                "planName",
+                "source",
+                "startsAt",
+                "endsAt"
+              ]
+            }
+          },
+          "redemptions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "planCode": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer"
+                },
+                "mode": {
+                  "type": "string"
+                },
+                "convertedDays": {
+                  "type": "integer"
+                },
+                "redeemedAt": {
+                  "type": "string"
+                },
+                "custom": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "planCode",
+                "days",
+                "mode",
+                "convertedDays",
+                "redeemedAt",
+                "custom"
+              ]
+            }
+          },
+          "issuedKeys": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "days": {
+                  "type": "integer"
+                },
+                "limits": {
+                  "type": "object",
+                  "properties": {
+                    "maxBranches": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "maxStaff": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "maxProducts": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "maxCustomers": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "maxOrdersPerMonth": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "maxBranches",
+                    "maxStaff",
+                    "maxProducts",
+                    "maxCustomers",
+                    "maxOrdersPerMonth"
+                  ]
+                },
+                "note": {
+                  "type": "string"
+                },
+                "issuedBy": {
+                  "type": "string"
+                },
+                "issuedAt": {
+                  "type": "string"
+                },
+                "redeemedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "revokedAt": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "days",
+                "limits",
+                "note",
+                "issuedBy",
+                "issuedAt",
+                "redeemedAt",
+                "revokedAt"
+              ]
+            }
+          },
+          "reminders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "endsAt": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "integer"
+                },
+                "sentAt": {
+                  "type": "string"
+                },
+                "manual": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "endsAt",
+                "step",
+                "sentAt",
+                "manual"
+              ]
+            }
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "adminName": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string"
+                },
+                "data": {},
+                "createdAt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "adminName",
+                "action",
+                "createdAt"
+              ]
+            }
+          }
+        },
+        "required": [
+          "account",
+          "plan",
+          "usage",
+          "timeline",
+          "redemptions",
+          "issuedKeys",
+          "reminders",
+          "activity"
+        ]
+      },
+      "IssuedKey": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "maxBranches": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxStaff": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxProducts": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxCustomers": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "maxOrdersPerMonth": {
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "maxBranches",
+              "maxStaff",
+              "maxProducts",
+              "maxCustomers",
+              "maxOrdersPerMonth"
+            ]
+          },
+          "note": {
+            "type": "string"
+          },
+          "issuedBy": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "type": "string"
+          },
+          "redeemedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revokedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "accountName",
+          "days",
+          "limits",
+          "note",
+          "issuedBy",
+          "issuedAt",
+          "redeemedAt",
+          "revokedAt"
+        ]
+      },
+      "AdminRedemption": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": "string"
+          },
+          "accountName": {
+            "type": "string"
+          },
+          "planCode": {
+            "type": "string"
+          },
+          "days": {
+            "type": "integer"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "redeemedAt": {
+            "type": "string"
+          },
+          "custom": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "accountId",
+          "accountName",
+          "planCode",
+          "days",
+          "mode",
+          "redeemedAt",
+          "custom"
+        ]
+      },
+      "AdminActivity": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "adminId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "adminName": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "accountId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "accountName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "data": {},
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "adminId",
+          "adminName",
+          "action",
+          "accountId",
+          "accountName",
+          "ip",
+          "createdAt"
         ]
       }
     },
@@ -15665,6 +16593,1795 @@
                   "required": [
                     "actions",
                     "users"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/login": {
+      "post": {
+        "summary": "Admin sign-in, step 1: email + password → code step (or authenticator setup on first sign-in)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "format": "email"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "email",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminLoginStep"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/setup-2fa": {
+      "post": {
+        "summary": "Admin sign-in, first time: confirm the authenticator app with a code",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 8
+                  }
+                },
+                "required": [
+                  "token",
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/verify": {
+      "post": {
+        "summary": "Admin sign-in, step 2: authenticator code",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 8
+                  }
+                },
+                "required": [
+                  "token",
+                  "code"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/refresh": {
+      "post": {
+        "summary": "New admin access token from the refresh cookie",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/logout": {
+      "post": {
+        "summary": "End the admin session",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "No content"
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/invite/{token}": {
+      "get": {
+        "summary": "Who an admin invite / reset link is for",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "email",
+                    "name"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/auth/accept": {
+      "post": {
+        "summary": "Set an admin password from an invite / reset link",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 8,
+                    "maxLength": 128
+                  }
+                },
+                "required": [
+                  "token",
+                  "password"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accepted": {
+                      "type": "boolean"
+                    },
+                    "email": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "accepted",
+                    "email"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/me": {
+      "get": {
+        "summary": "The signed-in admin",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admin": {
+                      "$ref": "#/components/schemas/SuperAdmin"
+                    }
+                  },
+                  "required": [
+                    "admin"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/dashboard": {
+      "get": {
+        "summary": "Totals: accounts, trial, paying by plan, expiring, sign-ups",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDashboard"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts": {
+      "get": {
+        "summary": "Accounts (?q=&status=trial|paid|granted|expired|unverified|locked&expiring=days&limit=&offset=)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "accounts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminAccountRow"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "accounts",
+                    "total"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}": {
+      "get": {
+        "summary": "One account: plan, usage vs limits, timeline, keys, reminders, Setu activity (counts only)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminAccountDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/lock": {
+      "post": {
+        "summary": "Lock an account (reason kept for the Setu team only)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "locked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "locked"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/unlock": {
+      "post": {
+        "summary": "Unlock an account",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "locked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "locked"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/add-days": {
+      "post": {
+        "summary": "Add free days of the current (or last) plan, after the timeline",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 365
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 500
+                  }
+                },
+                "required": [
+                  "days",
+                  "reason"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "planCode": {
+                      "type": "string"
+                    },
+                    "startsAt": {
+                      "type": "string"
+                    },
+                    "endsAt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "planCode",
+                    "startsAt",
+                    "endsAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/resend-verification": {
+      "post": {
+        "summary": "Email the owner a new verification link",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "boolean"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sent",
+                    "to"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/send-reset": {
+      "post": {
+        "summary": "Email the owner a password reset link",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "boolean"
+                    },
+                    "to": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sent",
+                    "to"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/accounts/{id}/remind": {
+      "post": {
+        "summary": "Email the owner a plan-ending (or ended) reminder now",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "sent"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reminders": {
+      "post": {
+        "summary": "Remind everyone whose plan ends within N days (skips anyone reminded in the last 24 h)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "withinDays": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60
+                  }
+                },
+                "required": [
+                  "withinDays"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "integer"
+                    },
+                    "skipped": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "sent",
+                    "skipped"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/keys": {
+      "post": {
+        "summary": "Issue a Contact-sales key (>100 branches) for one account; shown once and emailed to the owner",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "accountId": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3660
+                  },
+                  "maxBranches": {
+                    "type": "integer",
+                    "minimum": 101,
+                    "maximum": 100000
+                  },
+                  "maxStaff": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "maxProducts": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "maxCustomers": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "maxOrdersPerMonth": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 1,
+                    "maximum": 100000000
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 500,
+                    "default": ""
+                  }
+                },
+                "required": [
+                  "accountId",
+                  "days",
+                  "maxBranches",
+                  "maxStaff",
+                  "maxProducts",
+                  "maxCustomers",
+                  "maxOrdersPerMonth"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    },
+                    "emailedTo": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "redeemUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "key",
+                    "emailedTo",
+                    "redeemUrl"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Issued Contact-sales keys",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "keys": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IssuedKey"
+                      }
+                    }
+                  },
+                  "required": [
+                    "keys"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/keys/{id}/revoke": {
+      "post": {
+        "summary": "Cancel an issued key that hasn't been redeemed",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revoked": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "revoked"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/redemptions": {
+      "get": {
+        "summary": "All redeemed keys, newest first (?before= cursor)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redemptions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminRedemption"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "redemptions",
+                    "next"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/activity": {
+      "get": {
+        "summary": "What the Setu team did (?adminId=&accountId=&action= prefix&before=)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AdminActivity"
+                      }
+                    },
+                    "next": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "entries",
+                    "next"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/admins": {
+      "get": {
+        "summary": "The Setu team",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admins": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SuperAdmin"
+                      }
+                    }
+                  },
+                  "required": [
+                    "admins"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Invite a Setu team member (emails a set-password link)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "format": "email"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  }
+                },
+                "required": [
+                  "email",
+                  "name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admin": {
+                      "$ref": "#/components/schemas/SuperAdmin"
+                    }
+                  },
+                  "required": [
+                    "admin"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/admins/{id}/reset": {
+      "post": {
+        "summary": "Reset another admin's password and authenticator app",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admin": {
+                      "$ref": "#/components/schemas/SuperAdmin"
+                    }
+                  },
+                  "required": [
+                    "admin"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/admins/{id}/disable": {
+      "post": {
+        "summary": "Turn another admin off",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admin": {
+                      "$ref": "#/components/schemas/SuperAdmin"
+                    }
+                  },
+                  "required": [
+                    "admin"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/admins/{id}/enable": {
+      "post": {
+        "summary": "Turn an admin back on (sends a new set-password link)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "admin": {
+                      "$ref": "#/components/schemas/SuperAdmin"
+                    }
+                  },
+                  "required": [
+                    "admin"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/internal/cron/reminders": {
+      "get": {
+        "summary": "Daily job: plan-ending emails at 14, 7 and 1 days (Bearer CRON_SECRET)",
+        "tags": [
+          "super-admin"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sent": {
+                      "type": "integer"
+                    },
+                    "checked": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "sent",
+                    "checked"
                   ]
                 }
               }

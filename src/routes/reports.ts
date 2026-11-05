@@ -266,7 +266,7 @@ export function reportsRouter(ctx: Ctx): Router {
     const branch = branchFor(a, req.query.branchId);
     const { from, to } = range(ctx, a, req);
     const productId = typeof req.query.productId === "string" && req.query.productId ? req.query.productId : undefined;
-    const logs = await ctx.prisma.inventoryLog.findMany({ where: { branchId: branch.id, createdAt: { gte: from, lt: to }, ...(productId ? { productId } : {}) }, orderBy: { createdAt: "desc" }, take: 1000 });
+    const logs = await ctx.prisma.inventoryLog.findMany({ where: { branchId: branch.id, createdAt: { gte: from, lt: to }, ...(productId ? { productId } : {}) }, orderBy: [{ createdAt: "desc" }, { seq: "desc" }], take: 1000 });
     const [products, users] = await Promise.all([
       ctx.prisma.product.findMany({ where: { id: { in: [...new Set(logs.map((l) => l.productId))] } }, select: { id: true, name: true, unit: true } }),
       ctx.prisma.user.findMany({ where: { id: { in: [...new Set(logs.map((l) => l.userId).filter((x): x is string => Boolean(x)))] } }, select: { id: true, name: true } }),

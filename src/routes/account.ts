@@ -21,19 +21,24 @@ export function accountRouter(ctx: Ctx): Router {
     const a = auth(req);
     res.json({
       plan: planDto(a.plan),
-      usage: await usage(ctx.prisma, a.account.id),
+      usage: await usage(ctx.prisma, a.account.id, ctx.now()),
       keepActiveReviewPending: a.account.keepActiveReviewPending,
     });
   });
 
-  async function resolveKey(key: string): Promise<{ license: License; plan: Plan }> {
+  async function resolveKey(key: string, accountId: string): Promise<{ license: License; plan: Plan }> {
     const license = readLicenseKey(key, ctx.env.RETAIL_LICENSE_SECRET);
     if (!license) throw new AppError(400, "invalid_key", "That isn't a valid Setu Retail key. Check it against your receipt.");
     if (await ctx.prisma.licenseRedemption.findUnique({ where: { keyId: license.keyId } })) {
       throw new AppError(409, "key_used", "This key has already been redeemed.");
     }
-    // Contact-sales keys carry the "custom" plan byte; their plan row is created
-    // when the Setu team issues the key (Phase 7).
+    // Contact-sales keys carry the "custom" plan byte. The Setu team issues
+    // them for one account, with their own plan row (Phase 7).
+    if (license.plan === "custom") {
+      const issued = await ctx.prisma.issuedKey.findUnique({ where: { keyId: license.keyId } });
+      if (!issued || issued.revokedAt) throw new AppError(400, "invalid_key", "That isn't a valid Setu Retail key. Check it against your receipt.");
+      if (issued.accountId !== accountId) throw new AppError(403, "key_other_account", "This key was issued for a different Setu Retail account. Sign in to that account to redeem it.");
+    }
     const code = license.plan === "custom" ? `custom-${license.keyId}` : license.plan;
     const plan = await ctx.prisma.plan.findUnique({ where: { code } });
     if (!plan) throw new AppError(400, "invalid_key", "That isn't a valid Setu Retail key. Check it against your receipt.");
@@ -43,7 +48,7 @@ export function accountRouter(ctx: Ctx): Router {
   router.post("/account/license/check", async (req, res) => {
     const a = auth(req);
     const { key } = LicenseKeyBody.parse(req.body);
-    const { license, plan } = await resolveKey(key);
+    const { license, plan } = await resolveKey(key, a.account.id);
     const segments = await loadSegments(ctx.prisma, a.account.id);
     const now = ctx.now();
     const input = { planCode: plan.code, monthlyPriceInr: plan.monthlyPriceInr, days: license.days };
@@ -65,7 +70,7 @@ export function accountRouter(ctx: Ctx): Router {
   router.post("/account/license/redeem", async (req, res) => {
     const a = auth(req);
     const { key, choice } = RedeemBody.parse(req.body);
-    const { license, plan } = await resolveKey(key);
+    const { license, plan } = await resolveKey(key, a.account.id);
     const now = ctx.now();
 
     try {

@@ -42,7 +42,7 @@ export function productDto(p: Product, bp: BranchProduct | undefined, showCost: 
 /** Change a branch's stock and log why. Returns the new stock (milli). */
 export async function moveStock(
   db: Db,
-  args: { accountId: string; branchId: string; productId: string; change: number; type: InventoryChange; note?: string; refId?: string | null; userId: string | null; set?: number },
+  args: { accountId: string; branchId: string; productId: string; change: number; type: InventoryChange; note?: string; refId?: string | null; userId: string | null; set?: number; /** When it happened (the app clock). */ at: Date },
 ): Promise<number> {
   const row = await db.branchProduct.upsert({
     where: { branchId_productId: { branchId: args.branchId, productId: args.productId } },
@@ -60,6 +60,7 @@ export async function moveStock(
       note: args.note ?? "",
       refId: args.refId ?? null,
       userId: args.userId,
+      createdAt: args.at,
     },
   });
   return row.stockMilli;
@@ -180,7 +181,7 @@ export function catalogueRouter(ctx: Ctx): Router {
       const p = await tx.product.create({ data: { ...body, accountId: a.account.id } });
       for (const o of openingStock ?? []) {
         if (o.qtyMilli <= 0) continue;
-        await moveStock(tx, { accountId: a.account.id, branchId: o.branchId, productId: p.id, change: o.qtyMilli, type: "OPENING", userId: a.user.id });
+        await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: o.branchId, productId: p.id, change: o.qtyMilli, type: "OPENING", userId: a.user.id });
         if (a.account.batchTracking && p.trackStock) await addToOpeningBatch(tx, { accountId: a.account.id, branchId: o.branchId, productId: p.id, qtyMilli: o.qtyMilli, now: ctx.now() });
       }
       return p;
@@ -234,6 +235,7 @@ export function catalogueRouter(ctx: Ctx): Router {
       const current = (await tx.branchProduct.findUnique({ where: { branchId_productId: { branchId: branch.id, productId: p.id } } }))?.stockMilli ?? 0;
       const change = body.type === "ADD" ? body.qtyMilli : body.type === "REDUCE" ? -body.qtyMilli : body.qtyMilli - current;
       const after = await moveStock(tx, {
+        at: ctx.now(),
         accountId: a.account.id,
         branchId: branch.id,
         productId: p.id,
@@ -258,7 +260,7 @@ export function catalogueRouter(ctx: Ctx): Router {
     const a = auth(req);
     const p = await findProduct(ctx, a, req.params.id);
     const branch = branchFor(a, req.query.branchId);
-    const logs = await ctx.prisma.inventoryLog.findMany({ where: { productId: p.id, branchId: branch.id }, orderBy: { createdAt: "desc" }, take: 200 });
+    const logs = await ctx.prisma.inventoryLog.findMany({ where: { productId: p.id, branchId: branch.id }, orderBy: [{ createdAt: "desc" }, { seq: "desc" }], take: 200 });
     res.json({
       history: logs.map((l) => ({ id: l.id, type: l.type, changeMilli: l.changeMilli, stockAfterMilli: l.stockAfterMilli, note: l.note, refId: l.refId, createdAt: l.createdAt.toISOString() })),
     });
@@ -282,7 +284,7 @@ export function catalogueRouter(ctx: Ctx): Router {
     const body = BatchBody.parse(req.body);
     const branch = branchFor(a, body.branchId, true);
     const batch = await ctx.prisma.$transaction(async (tx) => {
-      await moveStock(tx, { accountId: a.account.id, branchId: branch.id, productId: p.id, change: body.qtyMilli, type: "ADD", note: body.note || `Batch ${body.batchNo || "—"}`, userId: a.user.id });
+      await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: branch.id, productId: p.id, change: body.qtyMilli, type: "ADD", note: body.note || `Batch ${body.batchNo || "—"}`, userId: a.user.id });
       return tx.batch.create({
         data: {
           accountId: a.account.id,

@@ -122,7 +122,7 @@ async function upsertProducts(ctx: Ctx, a: AuthContext, branch: Branch, rows: z.
         if (row.stockMilli !== undefined && product.trackStock) {
           const current = (await tx.branchProduct.findUnique({ where: { branchId_productId: { branchId: branch.id, productId: product.id } } }))?.stockMilli ?? 0;
           if (current !== row.stockMilli) {
-            await moveStock(tx, { accountId: a.account.id, branchId: branch.id, productId: product.id, change: row.stockMilli - current, type: "SET", set: row.stockMilli, note, userId: a.user.id });
+            await moveStock(tx, { at: ctx.now(), accountId: a.account.id, branchId: branch.id, productId: product.id, change: row.stockMilli - current, type: "SET", set: row.stockMilli, note, userId: a.user.id });
           }
           if (a.account.batchTracking) await reconcileBatches(tx, { accountId: a.account.id, branchId: branch.id, productId: product.id, stockMilli: row.stockMilli, now: ctx.now() });
         }

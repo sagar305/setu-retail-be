@@ -57,3 +57,58 @@ export function inviteMail(to: string, name: string, inviter: string, business: 
     "This link works once and expires in 7 days.",
   );
 }
+
+/** "Your plan ends soon" (automatic at 14, 7 and 1 days, or sent by the Setu team). */
+export function planEndingMail(to: string, name: string, business: string, planName: string, daysLeft: number, endsOn: string, url: string): Mail {
+  const when = daysLeft <= 1 ? "tomorrow" : `in ${daysLeft} days`;
+  return mail(
+    to,
+    `Your Setu Retail plan ends ${when}`,
+    `Your plan ends ${when}`,
+    [
+      `Hi ${name}, the ${planName} plan for ${business} ends on ${endsOn}.`,
+      "Renew with a license key to keep billing without a break. Your data stays safe either way; after the end date only the owner can sign in, to renew.",
+    ],
+    { label: "Renew now", url },
+    "Buy a key on setutechnology.com, then redeem it in Settings → Plan & key.",
+  );
+}
+
+/** Sent by the Setu team to an account whose plan has already ended. */
+export function planEndedMail(to: string, name: string, business: string, url: string): Mail {
+  return mail(
+    to,
+    "Your Setu Retail plan has ended",
+    "Your plan has ended",
+    [`Hi ${name}, the plan for ${business} has ended. Your data is kept: redeem a license key to start billing again.`],
+    { label: "Renew now", url },
+    "Buy a key on setutechnology.com, then redeem it in Settings → Plan & key.",
+  );
+}
+
+/** A Contact-sales key, issued by the Setu team for one account. */
+export function customKeyMail(to: string, name: string, business: string, key: string, summary: string, url: string): Mail {
+  return mail(
+    to,
+    "Your Setu Retail license key",
+    "Your license key is ready",
+    [`Hi ${name}, here is the Setu Retail key for ${business}: ${summary}.`, key, "It works only on your account. Sign in as the owner and press the button below; the key is filled in for you."],
+    { label: "Redeem in Setu Retail", url },
+    "Keep this key private. Questions? Reply to this email.",
+  );
+}
+
+/** Invite (or reset) for a Setu team member. */
+export function adminInviteMail(to: string, name: string, url: string, reset: boolean): Mail {
+  return mail(
+    to,
+    reset ? "Set a new Setu Retail admin password" : "You've been added to the Setu Retail admin",
+    reset ? "Set a new admin password" : "Welcome to the Setu Retail admin",
+    [
+      `Hi ${name}, ${reset ? "your admin sign-in was reset" : "you can now manage Setu Retail accounts"}.`,
+      "Set a password, then link an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password…) on your first sign-in.",
+    ],
+    { label: "Set my password", url },
+    "This link works once and expires in 48 hours.",
+  );
+}

@@ -11,6 +11,7 @@ import { MemoryMailer } from "../../src/mail/mailer.js";
 
 export const TEST_DB = process.env["TEST_DATABASE_URL"];
 export const APP_ORIGIN = "http://localhost:5173";
+export const CRON = "test-cron-secret-0123456789";
 
 let prisma: PrismaClient | undefined;
 let migrated = false;
@@ -27,14 +28,14 @@ export function db(): PrismaClient {
 
 export async function resetDb() {
   const p = db();
-  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans, inventory_logs, held_carts, expenses, customer_ledger_entries, cash_entries, cash_openings, supplier_ledger_entries, stock_transfers CASCADE");
+  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans, inventory_logs, held_carts, expenses, customer_ledger_entries, cash_entries, cash_openings, supplier_ledger_entries, stock_transfers, super_admins, admin_audit_logs CASCADE");
   for (const plan of PUBLIC_PLANS) await p.plan.create({ data: { ...plan, isPublic: true } });
 }
 
 export function harness(start = "2026-11-04T10:00:00Z") {
   const clock = { now: new Date(start) };
   const mailer = new MemoryMailer();
-  const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN });
+  const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN, CRON_SECRET: CRON });
   const app = createApp({ env, prisma: db(), mailer, now: () => clock.now });
   const advanceDays = (days: number) => {
     clock.now = new Date(clock.now.getTime() + days * 86_400_000);
