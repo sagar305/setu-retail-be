@@ -5,7 +5,7 @@
   "description": "Setu Retail cloud POS \u2014 API",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "22.x"
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",

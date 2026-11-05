@@ -1,7 +1,9 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express, { type Express } from "express";
-import helmet from "helmet";
+// Namespace import: helmet ships separate ESM and CommonJS typings, and only
+// `.default` is the middleware in both (Vercel's builder reads the CommonJS ones).
+import * as helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { corsOrigins, type Env } from "./config/env.js";
 import type { Ctx } from "./context.js";
@@ -48,7 +50,7 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
   // Vercel (and most hosts) sit behind one proxy hop.
   app.set("trust proxy", 1);
 
-  app.use(helmet());
+  app.use(helmet.default());
 
   const allowed = new Set(corsOrigins(env));
   app.use(
