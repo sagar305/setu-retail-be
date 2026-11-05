@@ -253,6 +253,17 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **App build guard:** the app's production build fails without `VITE_API_URL`.
 - **Help:** an in-app Help page for owners and staff.
 
+**Local-first (Phase 9, decisions v1.9):**
+- **Goal:** as smooth as the free Browser POS. Screens never wait for the cloud; sync runs in the background; after the app has loaded, it keeps working with no internet.
+- **Two steps:**
+  - 9a (built): every screen reads from this device first, the cloud refreshes it in the background, and screens work offline read-only.
+  - 9b: changes on all daily screens are saved on the device first, plus the owner's review list.
+- **Offline changes (9b):** all daily work (billing, products and prices, stock, customers, orders and returns, udhaar, expenses, cash book, supplier bills). Account-level screens need internet: staff, branches, plan and keys, POS settings, imports, audit log.
+- **Conflicts:** only real clashes go to the owner's "Needs review" list. That means the same field changed on two devices before syncing, an edit on one device and a delete on another, or two new customers with the same phone. The record keeps the cloud value until the owner picks; changes to different fields merge on their own.
+- **Local data:** the main lists, plus 3 months of history, for the user's branches. Each device keeps only what its user may see (cashiers get no cost or profit). A different person signing in wipes the previous person's copy. Access tokens are never stored.
+- **Warnings:** a banner when changes haven't reached the cloud for 6 hours, and a confirmation when signing out with changes still waiting.
+- **Speed:** the API runs in the Vercel region nearest the database (Singapore or Tokyo).
+
 ---
 
 ## 9. Open questions
