@@ -239,7 +239,7 @@ export function branchReportsRouter(ctx: Ctx): Router {
         entityType: r.entityType,
         entityId: r.entityId,
         userId: r.userId,
-        userName: r.userId ? (uById.get(r.userId)?.name ?? "Removed user") : r.action.startsWith("sync.") ? "Counter (offline sync)" : "System",
+        userName: r.userId ? (uById.get(r.userId)?.name ?? "Removed user") : r.action.startsWith("sync.") ? "Counter (offline sync)" : r.action.endsWith("_by_setu") || r.action === "license.days_added" ? "Setu team" : "System",
         role: r.userId ? (uById.get(r.userId)?.role ?? null) : null,
         branchId: r.branchId,
         branchCode: r.branchId ? (bById.get(r.branchId) ?? null) : null,

@@ -233,6 +233,16 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - Free POS page: "Upgrade to Setu Retail" link + note that the backup file can be imported.
 - Pricing FAQ text ("All of them except QR Menu…") updated.
 
+**Super-admin as built (Phase 7, decisions v1.7):**
+- **Sign-in:** Setu team logins are separate from shop users. Each uses email + password plus a 6-digit authenticator-app code (TOTP). The first sign-in after an invite or reset links the app. The first admin is created with `npm run admin:create` on the server; admins invite, reset and turn off each other in the app.
+- **Data access:** counts only. The team sees plan, expiry, usage vs limits, contact details, keys, reminders and Setu activity, never bills, customers or amounts.
+- **Contact-sales keys:** issued for one named account and redeemable only there. The key is shown once and emailed to the owner, and can be cancelled until redeemed.
+- **Free days:** can be added to any account, of the current (or last) plan, after the timeline. A reason is required. The owner sees "Free days added by Setu" in their audit log.
+- **Lock:** shop users see only "This account is locked. Contact Setu support."; the reason stays with the Setu team.
+- **Reminders:** a daily Vercel Cron job emails owners at 14, 7 and 1 days before the plan timeline ends, each step once. The team can also send a reminder now to one account, or to everyone ending within N days. The in-app banner shows for any plan ending within 14 days with nothing queued.
+- **Admin log:** every Setu team action is logged on the Activity page.
+- **Free POS import:** the backup import listed for Phase 7 was already built in Phases 2b and 4a.
+
 ---
 
 ## 9. Open questions
