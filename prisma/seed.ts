@@ -1,5 +1,6 @@
 // Seeds the public plans. Safe to re-run: existing rows keep the limits an
 // admin may have edited; only missing plans are created.
+import "dotenv/config";
 import { getPrisma } from "../src/db/client.js";
 import { PUBLIC_PLANS } from "../src/config/plans.js";
 
