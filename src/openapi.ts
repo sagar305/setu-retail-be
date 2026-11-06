@@ -9,6 +9,7 @@ import { ReceiveBody, TransferBody, TransferDto } from "./routes/transfers.js";
 import { AuditEntryDto, BranchComparisonDto, StockAcrossDto, TransferReportDto } from "./routes/branchReports.js";
 import { BarcodeGenerateBody, BranchReceiptBody, ReceiptTemplateBody, ReceiptTemplateDto } from "./routes/receipts.js";
 import * as A from "./schemasAdmin.js";
+import { ConflictDto, ResolveBody } from "./routes/conflicts.js";
 import { CustomerImportBody, CustomerRow, FreePosImportBody, ProductImportBody, ProductRow } from "./routes/imports.js";
 
 
@@ -395,6 +396,15 @@ for (const [method, path, summary, body, ok] of [
   route("post", "/admin/admins/{id}/disable", "Turn another admin off", { tag: t, ok: z.object({ admin: Admin }) });
   route("post", "/admin/admins/{id}/enable", "Turn an admin back on (sends a new set-password link)", { tag: t, ok: z.object({ admin: Admin }) });
   route("get", "/internal/cron/reminders", "Daily job: plan-ending emails at 14, 7 and 1 days (Bearer CRON_SECRET)", { tag: t, ok: z.object({ sent: z.number().int(), checked: z.number().int() }), secure: false });
+}
+
+// ── Phase 9b: changes made offline ──
+{
+  const t = "review";
+  const Conflict = registry.register("Conflict", ConflictDto);
+  route("get", "/conflicts/count", "How many items wait in the owner's review list", { tag: t, ok: z.object({ open: z.number().int() }) });
+  route("get", "/conflicts", "The owner's review list (?status=resolved for history)", { tag: t, ok: z.object({ conflicts: z.array(Conflict) }) });
+  route("post", "/conflicts/{id}/resolve", "Pick: keep cloud / use device value, discard / restore, keep both / merge", { tag: t, body: ResolveBody, ok: z.object({ conflict: Conflict }) });
 }
 
 export function buildOpenApiDocument(version: string) {

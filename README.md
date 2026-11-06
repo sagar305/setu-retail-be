@@ -58,6 +58,17 @@ Full spec: `GET /openapi.json`. Summary:
 - Plan-ending emails go out automatically at 14, 7 and 1 days before the end, from the daily Vercel Cron job (`vercel.json`, 09:00 IST) calling `GET /internal/cron/reminders` with `Authorization: Bearer $CRON_SECRET`.
 - The authenticator secrets are encrypted with a key derived from `JWT_SECRET`: changing `JWT_SECRET` means every admin links their app again (use `admin:create` to reset).
 
+### Hardening (Phase 8)
+- **Rate limits.** Sign-in, sign-up, email links and admin sign-in are counted in Postgres (`rate_limits`; keys are SHA-256 hashes, never emails). Over the limit, the API answers `429` with `Retry-After`. Limits live in `src/services/rateLimit.ts`. `RATE_LIMITS=off` is for tests and load tests only.
+- **Permissions.** `test/integration/permissions.test.ts` walks every route in `/openapi.json`:
+  - no token → 401;
+  - a shop token on `/admin/*` → 401;
+  - role limits for cashiers and managers;
+  - one shop can't read or change another's records.
+- **Load test.** `scripts/load-test.ts` (`seed`, then `run`). At the target (200 shops, 500 counters, 10 bills/s plus dashboards and offline-pack refreshes), one API process answered bills in 38 ms typically (60 ms for the slowest 5%) with no errors. It stayed clean up to about 50 bills/s per process. Never run it against production.
+- **Connections.** `DATABASE_POOL_MAX` (default 5) caps database connections per serverless instance, so many instances fit in the database's connection limit.
+- **Backups.** A nightly encrypted `pg_dump` runs as a GitHub Actions artifact, kept 90 days. Setup and restore steps: [docs/BACKUP-RESTORE.md](docs/BACKUP-RESTORE.md).
+
 ## Database
 
 `DATABASE_URL` can point at any PostgreSQL (Neon, Supabase, RDS, self-hosted). On Vercel use the provider's **pooled** connection string.
@@ -66,6 +77,6 @@ Schema: `prisma/schema.prisma`; migrations: `prisma/migrations/`. The Prisma cli
 ## Deploy (Vercel)
 
 - Project root = this repo. `vercel.json` sends every request to `api/index.ts` and runs `npm run vercel-build` (Prisma generate).
-- Env vars: `NODE_ENV=production`, `DATABASE_URL`, `CORS_ORIGINS=https://app.retail-pos.setutechnology.com`, `APP_URL=https://app.retail-pos.setutechnology.com`, `JWT_SECRET`, `RETAIL_LICENSE_SECRET` (same as setutechnology.com), `RESEND_API_KEY`, `MAIL_FROM` (a sender on a domain verified in Resend). The API refuses to start in production without them. Also set `CRON_SECRET` (16+ random characters; Vercel sends it to the cron job) or the automatic plan reminders are off.
+- Env vars: `NODE_ENV=production`, `DATABASE_URL`, `CORS_ORIGINS=https://app.retail-pos.setutechnology.com`, `APP_URL=https://app.retail-pos.setutechnology.com`, `JWT_SECRET`, `RETAIL_LICENSE_SECRET` (same as setutechnology.com), `RESEND_API_KEY`, `MAIL_FROM` (a sender on a domain verified in Resend). The API refuses to start in production without them. Also set `CRON_SECRET` (16+ random characters; Vercel sends it to the cron job) or the automatic plan reminders are off. If the web app reaches the API through its own address (`/api/*` rewrite, used before the custom domains), set `COOKIE_PATH_PREFIX=/api`.
 - Domain: `api.retail-pos.setutechnology.com`.
 - Migrations are **not** run on deploy (so a preview build can't touch production data). Run `npm run db:deploy` against the target database before promoting a release that adds one.

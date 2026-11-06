@@ -16,7 +16,7 @@ function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
     httpOnly: true,
     secure: ctx.env.NODE_ENV === "production",
     sameSite: "lax",
-    path: "/auth",
+    path: `${ctx.env.COOKIE_PATH_PREFIX}/auth`,
     expires,
   };
 }

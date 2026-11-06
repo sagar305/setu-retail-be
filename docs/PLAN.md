@@ -243,6 +243,33 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **Admin log:** every Setu team action is logged on the Activity page.
 - **Free POS import:** the backup import listed for Phase 7 was already built in Phases 2b and 4a.
 
+**Hardening as built (Phase 8, decisions v1.8):**
+- **Rate limits** in Postgres, with no new service. They cover sign-in, sign-up, email links and admin sign-in, and add to the per-login lockout.
+- **Errors:** Vercel logs only, with no error service.
+- **Backups:** a nightly encrypted `pg_dump` kept as a GitHub Actions artifact for 90 days, on top of the provider's own backups. Restore guide: `docs/BACKUP-RESTORE.md`.
+- **Load target:** 200 shops, 500 counters, about 10 bills/s at peak. One API process handled 5× that.
+- **Contact-sales keys** start when the current paid plan ends, with no choice shown. On a trial or free days they start now.
+- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite, `COOKIE_PATH_PREFIX=/api`), so sign-in cookies are first-party.
+- **App build guard:** the app's production build fails without `VITE_API_URL`.
+- **Help:** an in-app Help page for owners and staff.
+
+**Local-first (Phase 9, decisions v1.9):**
+- **Goal:** as smooth as the free Browser POS. Screens never wait for the cloud; sync runs in the background; after the app has loaded, it keeps working with no internet.
+- **Two steps:**
+  - 9a (built): every screen reads from this device first, the cloud refreshes it in the background, and screens work offline read-only.
+  - 9b: changes on all daily screens are saved on the device first, plus the owner's review list.
+- **Offline changes (9b):** all daily work (billing, products and prices, stock, customers, orders and returns, udhaar, expenses, cash book, supplier bills). Account-level screens need internet: staff, branches, plan and keys, POS settings, imports, audit log.
+- **Conflicts:** only real clashes go to the owner's "Needs review" list. That means the same field changed on two devices before syncing, an edit on one device and a delete on another, or two new customers with the same phone. The record keeps the cloud value until the owner picks; changes to different fields merge on their own.
+- **Local data:** the main lists, plus 3 months of history, for the user's branches. Each device keeps only what its user may see (cashiers get no cost or profit). A different person signing in wipes the previous person's copy. Access tokens are never stored.
+- **Warnings:** a banner when changes haven't reached the cloud for 6 hours, and a confirmation when signing out with changes still waiting.
+- **Speed:** the API runs in the Vercel region nearest the database (Singapore or Tokyo).
+- **9b as built:**
+  - Charge always saves the bill on the counter and prints at once; the cloud gets it in the background. "Block sale when stock runs out" uses the counter's stock, minus bills still waiting.
+  - A device registers as a counter the first time someone opens Billing on it (unchanged).
+  - Changes on the daily screens are queued on the device with an Idempotency-Key, shown on screen at once, and sent in order.
+  - Edits carry the values the device saw (`_base`), so the cloud can merge per field.
+  - Changes the cloud refuses are kept with the reason under "Waiting to sync".
+
 ---
 
 ## 9. Open questions

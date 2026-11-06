@@ -36,6 +36,8 @@ export const CounterPatchBody = z.object({ name: Name });
 export const CategoryBody = z.object({ name: Name });
 
 export const ProductBody = z.object({
+  /** Set by the device when the product was made offline (Phase 9b). */
+  id: z.uuid().optional(),
   name: Name,
   categoryId: z.uuid().nullable().optional(),
   sku: Text(60).optional(),
@@ -51,7 +53,7 @@ export const ProductBody = z.object({
   /** Opening stock in branches the user manages. */
   openingStock: z.array(z.object({ branchId: z.uuid(), qtyMilli: Milli.min(0) })).optional(),
 });
-export const ProductPatchBody = ProductBody.omit({ openingStock: true }).partial();
+export const ProductPatchBody = ProductBody.omit({ openingStock: true, id: true }).partial();
 export const BranchPriceBody = z.object({ price: Paise.nullable() });
 export const StockAdjustBody = z.object({
   branchId: z.uuid(),
@@ -72,6 +74,8 @@ export const BatchBody = z.object({
 export const BatchPatchBody = z.object({ batchNo: Text(60).optional(), expiry: Day.nullable().optional(), costPrice: Paise.nullable().optional() });
 
 export const CustomerBody = z.object({
+  /** Set by the device when the customer was added offline (Phase 9b). */
+  id: z.uuid().optional(),
   name: Name,
   phone: Text(20).optional(),
   email: z.union([z.email(), z.literal("")]).optional(),
@@ -82,7 +86,7 @@ export const CustomerBody = z.object({
   /** Udhaar due after this many days; null = the shop's setting. */
   creditDays: z.number().int().min(0).max(365).nullable().optional(),
 });
-export const CustomerPatchBody = CustomerBody.partial();
+export const CustomerPatchBody = CustomerBody.omit({ id: true }).partial();
 
 export const DiscountBody = z.object({ type: z.enum(["flat", "percent"]), value: z.number().int().min(0) });
 

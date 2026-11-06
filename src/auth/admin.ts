@@ -22,7 +22,7 @@ declare module "express-serve-static-core" {
 }
 
 function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
-  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path: "/admin/auth", expires };
+  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path: `${ctx.env.COOKIE_PATH_PREFIX}/admin/auth`, expires };
 }
 
 const readCookie = (req: Request): string | null => {

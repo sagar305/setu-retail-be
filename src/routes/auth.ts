@@ -27,6 +27,7 @@ import {
   VerifyEmailBody,
 } from "../schemas.js";
 import { audit } from "../services/audit.js";
+import { rateLimit, RULES } from "../services/rateLimit.js";
 import { DEFAULT_PAYMENT_METHODS } from "./settings.js";
 import { addMonths, planState } from "../services/plans.js";
 
@@ -93,7 +94,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
   const respond = sendSessionResponse(ctx);
   const sameOrigin = requireAllowedOrigin(allowedOrigins);
 
-  router.post("/auth/signup", async (req, res) => {
+  router.post("/auth/signup", rateLimit(ctx, RULES.signup), async (req, res) => {
     const body = SignupBody.parse(req.body);
     const email = normalizeEmail(body.email);
     const username = normalizeUsername(body.username);
@@ -148,7 +149,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.status(201).json({ status: "verification_sent", email });
   });
 
-  router.post("/auth/verify-email", async (req, res) => {
+  router.post("/auth/verify-email", rateLimit(ctx, RULES.token), async (req, res) => {
     const { token } = VerifyEmailBody.parse(req.body);
     const row = await consumeToken(ctx, token, "VERIFY_EMAIL");
     const now = ctx.now();
@@ -167,7 +168,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.json({ verified: true });
   });
 
-  router.post("/auth/resend-verification", async (req, res) => {
+  router.post("/auth/resend-verification", rateLimit(ctx, RULES.emailLink), async (req, res) => {
     const { email } = EmailOnlyBody.parse(req.body);
     const user = await ctx.prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
     if (user && !user.emailVerifiedAt && user.status === "ACTIVE") {
@@ -178,7 +179,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.status(202).json({ status: "sent_if_account_exists" });
   });
 
-  router.post("/auth/login", async (req, res) => {
+  router.post("/auth/login", rateLimit(ctx, RULES.login), async (req, res) => {
     const { login, password } = LoginBody.parse(req.body);
     const key = login.toLowerCase();
     const user = await ctx.prisma.user.findFirst({
@@ -221,7 +222,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.status(204).end();
   });
 
-  router.post("/auth/forgot-password", async (req, res) => {
+  router.post("/auth/forgot-password", rateLimit(ctx, RULES.emailLink), async (req, res) => {
     const { email } = EmailOnlyBody.parse(req.body);
     const user = await ctx.prisma.user.findUnique({ where: { email: normalizeEmail(email) } });
     if (user && user.status === "ACTIVE" && user.passwordHash) {
@@ -231,7 +232,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.status(202).json({ status: "sent_if_account_exists" });
   });
 
-  router.post("/auth/reset-password", async (req, res) => {
+  router.post("/auth/reset-password", rateLimit(ctx, RULES.token), async (req, res) => {
     const { token, password } = ResetPasswordBody.parse(req.body);
     const row = await consumeToken(ctx, token, "RESET_PASSWORD");
     const now = ctx.now();
@@ -249,7 +250,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     res.json({ reset: true });
   });
 
-  router.get("/auth/invite/:token", async (req, res) => {
+  router.get("/auth/invite/:token", rateLimit(ctx, RULES.token), async (req, res) => {
     const row = await consumeToken(ctx, String(req.params.token), "INVITE");
     res.json({
       name: row.user.name,
@@ -260,7 +261,7 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     });
   });
 
-  router.post("/auth/accept-invite", async (req, res) => {
+  router.post("/auth/accept-invite", rateLimit(ctx, RULES.token), async (req, res) => {
     const { token, password } = AcceptInviteBody.parse(req.body);
     const row = await consumeToken(ctx, token, "INVITE");
     if (row.user.status === "DISABLED") throw new AppError(403, "user_disabled", "Your access has been removed. Ask the shop owner.");

@@ -13,6 +13,8 @@ const At = z.iso.datetime();
 export const ToolsPatch = z.partialRecord(z.enum(TOOL_SLUGS), z.boolean());
 
 export const SupplierBody = z.object({
+  /** Set by the device when the supplier was added offline (Phase 9b). */
+  id: z.uuid().optional(),
   name: Name,
   phone: Text(20).optional(),
   email: Text(200).optional(),
@@ -21,7 +23,7 @@ export const SupplierBody = z.object({
   address: Text(300).optional(),
   notes: Text(500).optional(),
 });
-export const SupplierPatchBody = SupplierBody.partial();
+export const SupplierPatchBody = SupplierBody.omit({ id: true }).partial();
 
 export const ExpenseBody = z.object({
   id: z.uuid(),

@@ -4,6 +4,7 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import type { Db } from "../db/types.js";
 import type { BranchProduct, InventoryChange, Prisma, Product } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
+import { mergeFields, offlineMeta, recordClashes, recordRemovedEdit } from "../services/conflicts.js";
 import { changes } from "../lib/diff.js";
 import { BatchBody, BatchPatchBody, BranchPriceBody, CategoryBody, ProductBody, ProductPatchBody, StockAdjustBody } from "../schemas2.js";
 import { addToOpeningBatch, expiryStatus, fromDay, reconcileBatches, sortFefo, takeFromBatches, toDay } from "../services/batches.js";
@@ -193,15 +194,23 @@ export function catalogueRouter(ctx: Ctx): Router {
   router.patch("/products/:id", OM, async (req, res) => {
     const a = auth(req);
     const p = await findProduct(ctx, a, req.params.id);
-    const body = ProductPatchBody.parse(req.body);
-    const updated = await ctx.prisma.product.update({ where: { id: p.id }, data: body });
+    const parsed = ProductPatchBody.parse(req.body);
+    const { base, changedAt } = offlineMeta(req);
+    const subject = { entityType: "product" as const, entityId: p.id, label: p.name };
+    if (base && p.archivedAt) {
+      await recordRemovedEdit(ctx.prisma, a, subject, parsed, changedAt, ctx.now());
+      return void res.json({ product: productDto(p, undefined, true), conflicts: 1 });
+    }
+    const { apply: body, clashes } = mergeFields(p, parsed, base);
+    const conflicts = await recordClashes(ctx.prisma, a, subject, clashes, changedAt, ctx.now());
+    const updated = Object.keys(body).length ? await ctx.prisma.product.update({ where: { id: p.id }, data: body }) : p;
     const changed = changes(p, body);
     if ("price" in changed) {
       await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.price_changed", entityType: "product", entityId: p.id, data: { name: p.name, from: p.price, to: body.price! } });
       delete changed.price;
     }
     if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "product.updated", entityType: "product", entityId: p.id, data: { name: p.name, changes: changed } as never });
-    res.json({ product: productDto(updated, undefined, true) });
+    res.json({ product: productDto(updated, undefined, true), conflicts });
   });
 
   router.delete("/products/:id", OM, async (req, res) => {
@@ -217,6 +226,13 @@ export function catalogueRouter(ctx: Ctx): Router {
     const p = await findProduct(ctx, a, req.params.id);
     const branch = branchFor(a, req.params.branchId, true);
     const { price } = BranchPriceBody.parse(req.body);
+    const { base, changedAt } = offlineMeta(req);
+    const current = await ctx.prisma.branchProduct.findUnique({ where: { branchId_productId: { branchId: branch.id, productId: p.id } } });
+    const { apply, clashes } = mergeFields({ price: current?.price ?? null }, { price }, base);
+    if (!("price" in apply)) {
+      const conflicts = await recordClashes(ctx.prisma, a, { entityType: "branch_price", entityId: p.id, relatedId: branch.id, branchId: branch.id, label: `${p.name} · ${branch.code} price` }, clashes, changedAt, ctx.now());
+      return void res.json({ product: productDto(p, current ?? undefined, true), conflicts });
+    }
     const bp = await ctx.prisma.branchProduct.upsert({
       where: { branchId_productId: { branchId: branch.id, productId: p.id } },
       create: { branchId: branch.id, productId: p.id, price },

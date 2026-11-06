@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Ctx } from "../context.js";
 import { auth, authenticate, requireActivePlan, requireRole } from "../auth/middleware.js";
 import type { Customer, Prisma } from "../generated/prisma/client.js";
+import { mergeFields, offlineMeta, recordClashes, recordDuplicateCustomer, recordRemovedEdit } from "../services/conflicts.js";
 import { AppError } from "../http/errors.js";
 import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
 import { CustomerBody, CustomerPatchBody } from "../schemas2.js";
@@ -82,6 +83,11 @@ export function customersRouter(ctx: Ctx): Router {
       }
       return tx.customer.create({ data: { ...body, ...clean(body), accountId: a.account.id } });
     });
+    // Same phone as another customer (often both added on different counters offline): ask the owner.
+    if (c.phone) {
+      const other = await ctx.prisma.customer.findFirst({ where: { accountId: a.account.id, phone: c.phone, archivedAt: null, id: { not: c.id } }, orderBy: { createdAt: "asc" } });
+      if (other) await recordDuplicateCustomer(ctx.prisma, a, c.id, other, `${c.name} and ${other.name} (${c.phone})`, offlineMeta(req).changedAt, ctx.now());
+    }
     res.status(201).json({ customer: customerDto(c) });
   });
 
@@ -90,11 +96,19 @@ export function customersRouter(ctx: Ctx): Router {
     const body = CustomerPatchBody.parse(req.body);
     const found = await ctx.prisma.customer.findFirst({ where: { id: String(req.params.id), accountId: a.account.id } });
     if (!found) throw new AppError(404, "not_found", "Customer not found.");
-    const data = { ...body, ...clean(body) };
-    const c = await ctx.prisma.customer.update({ where: { id: found.id }, data });
+    const { base, changedAt } = offlineMeta(req);
+    const subject = { entityType: "customer" as const, entityId: found.id, label: found.name };
+    if (base && found.archivedAt) {
+      await recordRemovedEdit(ctx.prisma, a, subject, body, changedAt, ctx.now());
+      return void res.json({ customer: customerDto(found), conflicts: 1 });
+    }
+    const { apply, clashes } = mergeFields(found, { ...body, ...clean(body) }, base);
+    const conflicts = await recordClashes(ctx.prisma, a, subject, clashes, changedAt, ctx.now());
+    const data = apply;
+    const c = Object.keys(data).length ? await ctx.prisma.customer.update({ where: { id: found.id }, data }) : found;
     const changed = changes(found, data);
     if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "customer.updated", entityType: "customer", entityId: c.id, data: { name: found.name, changes: changed } as never });
-    res.json({ customer: customerDto(c) });
+    res.json({ customer: customerDto(c), conflicts });
   });
 
   return router;

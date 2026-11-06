@@ -9,7 +9,7 @@ import { readLicenseKey, type License } from "../lib/licenseKey.js";
 import { KeepActiveBody, LicenseKeyBody, RedeemBody } from "../schemas.js";
 import { audit } from "../services/audit.js";
 import { loadSegments, planState, usage } from "../services/plans.js";
-import { planRedemption } from "../services/planTimeline.js";
+import { planRedemption, timelineState, type Segment } from "../services/planTimeline.js";
 import { reconcileWithinPlan } from "../services/withinPlan.js";
 
 /** Owner-only plan screens. Reachable when the plan has expired, so the owner can renew. */
@@ -45,13 +45,23 @@ export function accountRouter(ctx: Ctx): Router {
     return { license, plan };
   }
 
+  /**
+   * Contact-sales (custom) keys never cut a paid plan short, since its days
+   * can't be converted (custom plans have no price): they start when the
+   * current paid plan ends. On a trial or free days they start now.
+   */
+  function forcedChoice(planCode: string, segments: readonly Segment[], now: Date): "now" | "later" | undefined {
+    if (!planCode.startsWith("custom-")) return undefined;
+    return timelineState(segments, now).current?.source === "KEY" ? "later" : "now";
+  }
+
   router.post("/account/license/check", async (req, res) => {
     const a = auth(req);
     const { key } = LicenseKeyBody.parse(req.body);
     const { license, plan } = await resolveKey(key, a.account.id);
     const segments = await loadSegments(ctx.prisma, a.account.id);
     const now = ctx.now();
-    const input = { planCode: plan.code, monthlyPriceInr: plan.monthlyPriceInr, days: license.days };
+    const input = { planCode: plan.code, monthlyPriceInr: plan.monthlyPriceInr, days: license.days, choice: forcedChoice(plan.code, segments, now) };
     const base = planRedemption(segments, now, input);
     const iso = (d: Date) => d.toISOString();
     res.json({
@@ -76,7 +86,7 @@ export function accountRouter(ctx: Ctx): Router {
     try {
       await ctx.prisma.$transaction(async (tx) => {
         const segments = await loadSegments(tx, a.account.id);
-        const p = planRedemption(segments, now, { planCode: plan.code, monthlyPriceInr: plan.monthlyPriceInr, days: license.days, choice });
+        const p = planRedemption(segments, now, { planCode: plan.code, monthlyPriceInr: plan.monthlyPriceInr, days: license.days, choice: forcedChoice(plan.code, segments, now) ?? choice });
         if (p.needsChoice) throw new AppError(400, "choice_required", "Choose whether the new plan starts now or after your current plan.");
 
         const redemption = await tx.licenseRedemption.create({

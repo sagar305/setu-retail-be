@@ -1,0 +1,79 @@
+name: Nightly database backup
+
+# Every night: pg_dump the production database, encrypt it, and keep it as a
+# workflow artifact for 90 days. Restore steps: docs/BACKUP-RESTORE.md.
+#
+# Repository secrets (Settings → Secrets and variables → Actions):
+#   BACKUP_DATABASE_URL  the database's direct connection string (not a pooler)
+#   BACKUP_PASSPHRASE    a long random passphrase; keep a copy outside GitHub,
+#                        without it the backups can't be opened
+
+on:
+  schedule:
+    - cron: "17 21 * * *" # 02:47 IST, a quiet hour for shops
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check secrets
+        env:
+          URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$PASS" ]; then
+            echo "::error::Set the BACKUP_DATABASE_URL and BACKUP_PASSPHRASE repository secrets."
+            exit 1
+          fi
+          if [ "${#PASS}" -lt 24 ]; then
+            echo "::error::BACKUP_PASSPHRASE should be at least 24 characters."
+            exit 1
+          fi
+
+      - name: Install pg_dump 18 (dumps any older server too)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-18
+          /usr/lib/postgresql/18/bin/pg_dump --version
+
+      - name: Dump
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+        run: |
+          /usr/lib/postgresql/18/bin/pg_dump "$DATABASE_URL" --format=custom --compress=9 --no-owner --no-privileges --file=db.dump
+          # Fails if the file is not a readable dump.
+          /usr/lib/postgresql/18/bin/pg_restore --list db.dump > contents.txt
+          echo "Tables: $(grep -c ' TABLE DATA ' contents.txt)"
+          ls -lh db.dump
+
+      - name: Encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          name="setu-retail-$(date -u +%Y-%m-%dT%H%MZ).dump.enc"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -pass env:BACKUP_PASSPHRASE -in db.dump -out "$name"
+          sha256sum "$name" > "$name.sha256"
+          rm db.dump contents.txt
+          echo "NAME=$name" >> "$GITHUB_ENV"
+
+      - name: Keep for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.NAME }}
+          path: |
+            ${{ env.NAME }}
+            ${{ env.NAME }}.sha256
+          retention-days: 90
+          compression-level: 0
+          if-no-files-found: error
