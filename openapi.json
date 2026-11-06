@@ -1902,6 +1902,10 @@
       "ProductBody": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
           "name": {
             "type": "string",
             "minLength": 1,
@@ -7035,6 +7039,85 @@
           "ip",
           "createdAt"
         ]
+      },
+      "Conflict": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "field",
+              "removed",
+              "duplicate_customer"
+            ]
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "relatedId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "baseValue": {},
+          "cloudValue": {},
+          "deviceValue": {},
+          "userName": {
+            "type": "string"
+          },
+          "changedAt": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPEN",
+              "RESOLVED"
+            ]
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolvedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "entityType",
+          "entityId",
+          "relatedId",
+          "label",
+          "field",
+          "userName",
+          "changedAt",
+          "status",
+          "resolution",
+          "resolvedAt"
+        ]
       }
     },
     "parameters": {}
@@ -9796,6 +9879,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -10504,6 +10591,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -12943,6 +13034,10 @@
               "schema": {
                 "type": "object",
                 "properties": {
+                  "id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
                   "name": {
                     "type": "string",
                     "minLength": 1,
@@ -18382,6 +18477,193 @@
                   "required": [
                     "sent",
                     "checked"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conflicts/count": {
+      "get": {
+        "summary": "How many items wait in the owner's review list",
+        "tags": [
+          "review"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "open": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "open"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conflicts": {
+      "get": {
+        "summary": "The owner's review list (?status=resolved for history)",
+        "tags": [
+          "review"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conflicts": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Conflict"
+                      }
+                    }
+                  },
+                  "required": [
+                    "conflicts"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/conflicts/{id}/resolve": {
+      "post": {
+        "summary": "Pick: keep cloud / use device value, discard / restore, keep both / merge",
+        "tags": [
+          "review"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "choice": {
+                    "type": "string",
+                    "enum": [
+                      "cloud",
+                      "device",
+                      "discard",
+                      "restore",
+                      "keep_both",
+                      "merge"
+                    ]
+                  }
+                },
+                "required": [
+                  "choice"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "conflict": {
+                      "$ref": "#/components/schemas/Conflict"
+                    }
+                  },
+                  "required": [
+                    "conflict"
                   ]
                 }
               }

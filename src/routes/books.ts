@@ -10,6 +10,7 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import type { Expense, PaymentMethod, Supplier } from "../generated/prisma/client.js";
 import type { Db } from "../db/types.js";
 import { isUniqueViolation } from "../db/errors.js";
+import { mergeFields, offlineMeta, recordClashes, recordRemovedEdit } from "../services/conflicts.js";
 import { AppError } from "../http/errors.js";
 import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
 import { audit } from "../services/audit.js";
@@ -150,12 +151,19 @@ export function booksRouter(ctx: Ctx): Router {
     const a = auth(req);
     const found = await findSupplier(a, req.params.id);
     const body = SupplierPatchBody.parse(req.body);
-    const data = { ...body, ...cleanSupplier(body) };
-    const s = await ctx.prisma.supplier.update({ where: { id: found.id }, data });
+    const { base, changedAt } = offlineMeta(req);
+    const subject = { entityType: "supplier" as const, entityId: found.id, label: found.name };
+    if (base && found.archivedAt) {
+      await recordRemovedEdit(ctx.prisma, a, subject, body, changedAt, ctx.now());
+      return void res.json({ supplier: supplierDto(found), conflicts: 1 });
+    }
+    const { apply: data, clashes } = mergeFields(found, { ...body, ...cleanSupplier(body) }, base);
+    const conflicts = await recordClashes(ctx.prisma, a, subject, clashes, changedAt, ctx.now());
+    const s = Object.keys(data).length ? await ctx.prisma.supplier.update({ where: { id: found.id }, data }) : found;
     const changed = changes(found, data);
     if (Object.keys(changed).length) await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "supplier.updated", entityType: "supplier", entityId: s.id, data: { name: found.name, changes: changed } as never });
     const balances = await supplierBalances(ctx.prisma, a.account.id, [s.id]);
-    res.json({ supplier: supplierDto(s, balances.get(s.id) ?? 0) });
+    res.json({ supplier: supplierDto(s, balances.get(s.id) ?? 0), conflicts });
   });
 
   router.delete("/suppliers/:id", OM, SUPPLIER_TOOLS, async (req, res) => {

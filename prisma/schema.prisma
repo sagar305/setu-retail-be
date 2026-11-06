@@ -456,6 +456,61 @@ model RateLimit {
   @@map("rate_limits")
 }
 
+/// Changes made offline are sent with an Idempotency-Key: a retry (or a second
+/// device sending the same change) gets the first answer instead of applying
+/// it twice. Kept 7 days. Phase 9b.
+model IdempotencyKey {
+  key       String   @id
+  userId    String   @db.Uuid
+  method    String
+  path      String
+  /// Null while the first request is still running.
+  status    Int?
+  body      Json?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@map("idempotency_keys")
+}
+
+enum ConflictStatus {
+  OPEN
+  RESOLVED
+}
+
+/// The owner's "Needs review" list (decision v1.9): the same field changed on
+/// two devices before syncing, an edit to something removed meanwhile, or two
+/// new customers with the same phone. The record keeps the cloud value until
+/// the owner picks.
+model Conflict {
+  id          String         @id @default(uuid()) @db.Uuid
+  accountId   String         @db.Uuid
+  branchId    String?        @db.Uuid
+  /// "field" | "removed" | "duplicate_customer"
+  kind        String
+  /// "product" | "branch_price" | "customer" | "supplier"
+  entityType  String
+  entityId    String
+  /// For branch prices: the branch; for duplicates: the existing customer.
+  relatedId   String?
+  label       String
+  field       String?
+  baseValue   Json?
+  cloudValue  Json?
+  deviceValue Json?
+  userId      String?        @db.Uuid
+  userName    String         @default("")
+  changedAt   DateTime       @db.Timestamptz(3)
+  status      ConflictStatus @default(OPEN)
+  resolution  String?
+  resolvedBy  String?        @db.Uuid
+  resolvedAt  DateTime?      @db.Timestamptz(3)
+  createdAt   DateTime       @default(now()) @db.Timestamptz(3)
+
+  @@index([accountId, status, createdAt])
+  @@map("conflicts")
+}
+
 // ─── Catalogue & stock ──────────────────────────────────────────────────────
 // Quantities are integer thousandths ("milli") so 1.5 kg = 1500; money is paise.
 

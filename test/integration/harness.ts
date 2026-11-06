@@ -28,7 +28,7 @@ export function db(): PrismaClient {
 
 export async function resetDb() {
   const p = db();
-  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans, inventory_logs, held_carts, expenses, customer_ledger_entries, cash_entries, cash_openings, supplier_ledger_entries, stock_transfers, super_admins, admin_audit_logs, rate_limits CASCADE");
+  await p.$executeRawUnsafe("TRUNCATE accounts, trial_claims, plans, inventory_logs, held_carts, expenses, customer_ledger_entries, cash_entries, cash_openings, supplier_ledger_entries, stock_transfers, super_admins, admin_audit_logs, rate_limits, idempotency_keys, conflicts CASCADE");
   for (const plan of PUBLIC_PLANS) await p.plan.create({ data: { ...plan, isPublic: true } });
 }
 

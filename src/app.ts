@@ -12,6 +12,8 @@ import { AppError, errorHandler, notFound } from "./http/errors.js";
 import { LogMailer, type Mailer } from "./mail/mailer.js";
 import { buildOpenApiDocument } from "./openapi.js";
 import { accountRouter } from "./routes/account.js";
+import { idempotency } from "./http/idempotency.js";
+import { conflictsRouter } from "./routes/conflicts.js";
 import { adminRouter } from "./routes/admin.js";
 import { adminAuthRouter } from "./routes/adminAuth.js";
 import { authRouter } from "./routes/auth.js";
@@ -80,6 +82,8 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
 
   if (prisma) {
     const ctx: Ctx = { env, prisma, mailer: mailer ?? new LogMailer(), now: now ?? (() => new Date()) };
+    // Offline changes are replayed with an Idempotency-Key (Phase 9b).
+    app.use(idempotency(ctx));
     app.use(authRouter(ctx, allowed));
     app.use(adminAuthRouter(ctx, allowed));
     app.use(adminRouter(ctx));
@@ -99,8 +103,9 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
     app.use(booksRouter(ctx));
     app.use(purchasesRouter(ctx));
     app.use(syncRouter(ctx));
+    app.use(conflictsRouter(ctx));
   } else {
-    app.use(["/admin", "/internal", "/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates", "/transfers", "/audit-log"], (_req, _res, next) =>
+    app.use(["/admin", "/internal", "/auth", "/me", "/account", "/branches", "/staff", "/settings", "/payment-methods", "/counters", "/categories", "/products", "/customers", "/orders", "/held-carts", "/reports", "/batches", "/imports", "/sync", "/suppliers", "/expenses", "/expense-categories", "/ledger", "/cash-book", "/purchases", "/purchase-returns", "/receipt-templates", "/transfers", "/audit-log", "/conflicts"], (_req, _res, next) =>
       next(new AppError(503, "db_not_configured", "Database is not configured.")),
     );
   }
