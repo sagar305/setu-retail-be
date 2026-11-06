@@ -263,6 +263,12 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **Local data:** the main lists, plus 3 months of history, for the user's branches. Each device keeps only what its user may see (cashiers get no cost or profit). A different person signing in wipes the previous person's copy. Access tokens are never stored.
 - **Warnings:** a banner when changes haven't reached the cloud for 6 hours, and a confirmation when signing out with changes still waiting.
 - **Speed:** the API runs in the Vercel region nearest the database (Singapore or Tokyo).
+- **9b as built:**
+  - Charge always saves the bill on the counter and prints at once; the cloud gets it in the background. "Block sale when stock runs out" uses the counter's stock, minus bills still waiting.
+  - A device registers as a counter the first time someone opens Billing on it (unchanged).
+  - Changes on the daily screens are queued on the device with an Idempotency-Key, shown on screen at once, and sent in order.
+  - Edits carry the values the device saw (`_base`), so the cloud can merge per field.
+  - Changes the cloud refuses are kept with the reason under "Waiting to sync".
 
 ---
 
