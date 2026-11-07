@@ -21,7 +21,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "vercel-build": "prisma generate && prisma migrate deploy",
     "openapi:export": "tsx scripts/export-openapi.ts",
-    "admin:create": "tsx scripts/create-admin.ts"
+    "admin:create": "tsx scripts/create-admin.ts",
+    "demo:seed": "tsx scripts/demo-seed.ts",
+    "demo:dump": "tsx scripts/demo-dump.ts",
+    "demo:restore": "tsx scripts/demo-restore.ts"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "9.1.0",

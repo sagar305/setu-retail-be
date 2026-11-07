@@ -35,8 +35,25 @@ const schema = z
      * under that path: set "/api". Empty when the API has its own domain.
      */
     COOKIE_PATH_PREFIX: z.string().regex(/^(\/[a-z0-9-]+)?$/, "Use a path like /api, or leave empty.").default(""),
+    /**
+     * Demo deployment only: wipe the database and restore the demo snapshot
+     * every DEMO_RESET_INTERVAL_HOURS. Never set it where real shops live.
+     */
+    DEMO_RESET_ENABLED: z
+      .enum(["1", "true", "0", "false"])
+      .default("0")
+      .transform((v) => v === "1" || v === "true"),
+    /** Hours between resets, counted from midnight UTC (2 → 00:00, 02:00, 04:00 …). */
+    DEMO_RESET_INTERVAL_HOURS: z.coerce.number().min(0.25).max(168).default(2),
+    /** The snapshot written by `npm run demo:dump`, relative to the project root. */
+    DEMO_RESET_DUMP_PATH: z.string().default("demo-dump/demo.json.gz"),
+    /** The only database name a reset may wipe. Required when resets are on. */
+    DEMO_RESET_EXPECT_DB: z.string().min(1).optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.DEMO_RESET_ENABLED && !env.DEMO_RESET_EXPECT_DB) {
+      ctx.addIssue({ code: "custom", path: ["DEMO_RESET_EXPECT_DB"], message: "Set DEMO_RESET_EXPECT_DB to the demo database's name before turning resets on" });
+    }
     if (env.NODE_ENV !== "production") return;
     const need = (key: keyof typeof env, ok: boolean, message: string) => {
       if (!ok) ctx.addIssue({ code: "custom", path: [key], message });

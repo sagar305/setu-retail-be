@@ -407,6 +407,19 @@ for (const [method, path, summary, body, ok] of [
   route("post", "/conflicts/{id}/resolve", "Pick: keep cloud / use device value, discard / restore, keep both / merge", { tag: t, body: ResolveBody, ok: z.object({ conflict: Conflict }) });
 }
 
+// ── Demo deployment ──
+route("get", "/demo/reset", "When the demo data is next wiped (enabled: false everywhere but the demo)", {
+  tag: "demo",
+  secure: false,
+  ok: z.object({
+    enabled: z.boolean(),
+    intervalHours: z.number().nullable(),
+    nextResetAt: z.iso.datetime().nullable(),
+    secondsUntilReset: z.number().int().nullable(),
+    resetting: z.boolean(),
+  }),
+});
+
 export function buildOpenApiDocument(version: string) {
   return new OpenApiGeneratorV31(registry.definitions).generateDocument({
     openapi: "3.1.0",

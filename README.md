@@ -24,6 +24,9 @@ npm run dev                   # http://localhost:4000/health
 | `npm run db:migrate` | Create a migration while developing (`prisma migrate dev`) |
 | `npm run db:deploy` | Apply migrations (`prisma migrate deploy`) |
 | `npm run db:seed` | Insert missing public plans; never overwrites edited limits |
+| `npm run demo:seed` | Build the sample shop on an empty demo database (see [Demo](#demo-deployment)) |
+| `npm run demo:dump` | Capture the demo database as `demo-dump/demo.json.gz` |
+| `npm run demo:restore -- --yes` | Wipe the demo database and restore that snapshot now |
 
 ## Endpoints
 
@@ -80,3 +83,27 @@ Schema: `prisma/schema.prisma`; migrations: `prisma/migrations/`. The Prisma cli
 - Env vars: `NODE_ENV=production`, `DATABASE_URL`, `CORS_ORIGINS=https://app.retail-pos.setutechnology.com`, `APP_URL=https://app.retail-pos.setutechnology.com`, `JWT_SECRET`, `RETAIL_LICENSE_SECRET` (same as setutechnology.com), `RESEND_API_KEY`, `MAIL_FROM` (a sender on a domain verified in Resend). The API refuses to start in production without them. Also set `CRON_SECRET` (16+ random characters; Vercel sends it to the cron job) or the automatic plan reminders are off. If the web app reaches the API through its own address (`/api/*` rewrite, used before the custom domains), set `COOKIE_PATH_PREFIX=/api`.
 - Domain: `api.retail-pos.setutechnology.com`.
 - Migrations are **not** run on deploy (so a preview build can't touch production data). Run `npm run db:deploy` against the target database before promoting a release that adds one.
+
+## Demo deployment
+
+A public demo (`demo.retail-pos.setutechnology.com`) is **a second Vercel project on this same repo, with its own database**. Visitors sign in with a shared login; every 2 hours the database is wiped and the sample shop restored, so whatever they type disappears.
+
+**How the reset works** (`src/services/demoReset.ts`). Vercel has no long-running process, so there is no timer: reset times are counted from midnight UTC (00:00, 02:00, 04:00 … for 2 hours) and **the first request after a reset time** wipes every table and loads `demo-dump/demo.json.gz` before it is answered (about a second for the sample shop). It runs in one transaction under an advisory lock, so other requests see the old data until the new data is in and only one instance resets. Every timestamp is moved forward by the time since the snapshot (dates by whole days), so yesterday's bills in the snapshot are always yesterday's, the plan never runs out and batch expiries stay ahead. Sign-ins, rate limits, replay keys and the Setu team's admin logins are never captured, so a reset signs every visitor out. `GET /demo/reset` reports the next reset time for the countdown in the web app (`enabled: false` everywhere else).
+
+| Variable | Default | |
+|---|---|---|
+| `DEMO_RESET_ENABLED` | off | Master switch (`1`/`true`). Nothing is wiped without it. |
+| `DEMO_RESET_EXPECT_DB` | — | Required with the switch: the only database name a reset may wipe. A mistyped `DATABASE_URL` pointing at production is refused. |
+| `DEMO_RESET_INTERVAL_HOURS` | `2` | 0.25 to 168. |
+| `DEMO_RESET_DUMP_PATH` | `demo-dump/demo.json.gz` | Bundled into the function by `vercel.json` (`includeFiles`). |
+
+**Changing the demo shop.** Restore the snapshot into the demo database (or a local copy), change it in the app, then capture it again and commit:
+
+```bash
+export DATABASE_URL=<demo database, direct URL> DEMO_RESET_EXPECT_DB=<its name>
+npm run demo:restore -- --yes   # start from the current snapshot
+# … edit in the app …
+npm run demo:dump               # writes demo-dump/demo.json.gz
+```
+
+To build it from nothing: an empty database, `npm run db:deploy && npm run db:seed && npm run demo:seed` (sample shop, three weeks of bills), then `npm run demo:dump`. After a migration that adds a required column with no default, run `demo:restore` + `demo:dump` again so the snapshot has it; until then a failed reset is rolled back and the demo keeps its current data.
