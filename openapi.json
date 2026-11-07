@@ -929,6 +929,12 @@
               "string",
               "null"
             ]
+          },
+          "upiId": {
+            "type": "string"
+          },
+          "printUpiQrOnReceipt": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -941,7 +947,9 @@
           "batchTracking",
           "tools",
           "creditDays",
-          "logoDataUrl"
+          "logoDataUrl",
+          "upiId",
+          "printUpiQrOnReceipt"
         ]
       },
       "PaymentMethod": {
@@ -9089,6 +9097,23 @@
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 365
+                  },
+                  "upiId": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          ""
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,63}$/i"
+                      }
+                    ]
+                  },
+                  "printUpiQrOnReceipt": {
+                    "type": "boolean"
                   },
                   "logoDataUrl": {
                     "type": [

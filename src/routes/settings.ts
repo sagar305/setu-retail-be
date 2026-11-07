@@ -21,6 +21,8 @@ export const settingsDto = (a: Account) => ({
   tools: toolsDto(a),
   creditDays: a.creditDays,
   logoDataUrl: a.logoDataUrl,
+  upiId: a.upiId,
+  printUpiQrOnReceipt: a.printUpiQrOnReceipt,
 });
 
 export const DEFAULT_PAYMENT_METHODS = [

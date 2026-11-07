@@ -140,6 +140,10 @@ model Account {
   creditDays           Int      @default(0)
   /// Shop logo for receipts (PNG/JPEG data URL, small).
   logoDataUrl          String?
+  /// The shop's UPI ID (handle@psp): billing shows a QR for the exact amount.
+  upiId                String   @default("")
+  /// Print a UPI QR for the amount due by UPI on receipts (needs upiId).
+  printUpiQrOnReceipt  Boolean  @default(false)
   /// Next stock transfer number (T-00001…).
   nextTransferNumber   Int      @default(1)
   createdAt            DateTime @default(now()) @db.Timestamptz(3)
