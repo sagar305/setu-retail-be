@@ -20,6 +20,9 @@ export const SettingsPatchBody = z.object({
   /** Udhaar is due this many days after the bill (Invoice Aging). */
   creditDays: z.number().int().min(0).max(365).optional(),
   /** Shop logo for receipts: a PNG/JPEG/WebP data URL up to ~150 KB, or null to remove. */
+  /** The shop's UPI ID, e.g. sharmastores@okaxis; "" to remove. */
+  upiId: z.union([z.literal(""), z.string().trim().regex(/^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,63}$/i, "Enter a UPI ID like shopname@okaxis.")]).optional(),
+  printUpiQrOnReceipt: z.boolean().optional(),
   logoDataUrl: z.string().max(200_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, "Use a PNG, JPEG or WebP image.").nullable().optional(),
 });
 
@@ -137,6 +140,8 @@ export const SettingsDto = z.object({
   tools: z.record(z.string(), z.boolean()),
   creditDays: z.number().int(),
   logoDataUrl: z.string().nullable(),
+  upiId: z.string(),
+  printUpiQrOnReceipt: z.boolean(),
 });
 export const PaymentMethodDto = z.object({ id: z.uuid(), name: z.string(), kind: Kind, active: z.boolean(), sort: z.number().int() });
 export const CounterDto = z.object({ id: z.uuid(), branchId: z.uuid(), code: z.string(), name: z.string(), lastSeenAt: Iso.nullable() });
