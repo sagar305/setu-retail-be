@@ -7,10 +7,14 @@
 // vectors in test/books.test.ts must pass in both repos.
 // ---------------------------------------------------------------------------
 
-export type PurchaseLineInput = { qtyMilli: number; unitCost: number; gstRateBp: number };
+import { splitTax, sumTaxes, taxesRate, type TaxAmount, type TaxPart } from "./gst.js";
+
+/** taxes: custom tax mode (gstRateBp is then their sum). */
+export type PurchaseLineInput = { qtyMilli: number; unitCost: number; gstRateBp: number; taxes?: TaxPart[] };
 export type PurchaseLineAmounts = { taxable: number; cgst: number; sgst: number; igst: number; total: number };
 export type PurchaseBill = {
-  lines: (PurchaseLineInput & PurchaseLineAmounts)[];
+  lines: (Omit<PurchaseLineInput, "taxes"> & PurchaseLineAmounts & { taxes: TaxAmount[] })[];
+  taxTotals: TaxAmount[];
   taxableTotal: number;
   cgstTotal: number;
   sgstTotal: number;
@@ -29,6 +33,12 @@ export function computePurchase(lines: PurchaseLineInput[], interState: boolean)
   let odd = 0;
   const out = lines.map((l) => {
     const taxable = rnd((l.unitCost * l.qtyMilli) / 1000);
+    const { taxes: parts, ...rest } = l;
+    if (parts) {
+      const rate = taxesRate(parts);
+      const tax = rate > 0 ? rnd((taxable * rate) / 10_000) : 0;
+      return { ...rest, gstRateBp: rate, taxable, cgst: 0, sgst: 0, igst: 0, taxes: tax > 0 ? splitTax(tax, parts) : [], total: taxable + tax };
+    }
     const tax = l.gstRateBp > 0 ? rnd((taxable * l.gstRateBp) / 10_000) : 0;
     let cgst = 0;
     if (!interState) {
@@ -37,10 +47,10 @@ export function computePurchase(lines: PurchaseLineInput[], interState: boolean)
     }
     const sgst = interState ? 0 : tax - cgst;
     const igst = interState ? tax : 0;
-    return { ...l, taxable, cgst, sgst, igst, total: taxable + tax };
+    return { ...rest, taxable, cgst, sgst, igst, taxes: [] as TaxAmount[], total: taxable + tax };
   });
   const sum = (k: keyof PurchaseLineAmounts) => out.reduce((a, l) => a + l[k], 0);
-  return { lines: out, taxableTotal: sum("taxable"), cgstTotal: sum("cgst"), sgstTotal: sum("sgst"), igstTotal: sum("igst"), total: sum("total") };
+  return { lines: out, taxTotals: sumTaxes(out.map((l) => l.taxes)), taxableTotal: sum("taxable"), cgstTotal: sum("cgst"), sgstTotal: sum("sgst"), igstTotal: sum("igst"), total: sum("total") };
 }
 
 export type Due = { id: string; at: string; amount: number };

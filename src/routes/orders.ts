@@ -5,7 +5,8 @@ import { isUniqueViolation } from "../db/errors.js";
 import type { Prisma } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
 import { toolOn } from "../services/books.js";
-import { computeBill, placeOfSupply, returnAmounts, type Discount } from "../lib/gst.js";
+import { computeBill, placeOfSupply, returnAmounts, sumTaxes, type Discount } from "../lib/gst.js";
+import { asTaxes, productTaxes } from "../lib/taxes.js";
 import { startOfDay, startOfMonth } from "../lib/time.js";
 import { CancelBody, HeldCartBody, OrderBody, ReturnBody } from "../schemas2.js";
 import { audit } from "../services/audit.js";
@@ -30,6 +31,8 @@ export function orderDto(o: FullOrder, cashierName?: string) {
     placeOfSupply: o.placeOfSupply,
     interState: o.interState,
     taxEnabled: o.taxEnabled,
+    taxMode: o.taxMode,
+    taxTotals: sumTaxes(o.items.map((i) => asTaxes(i.taxes))),
     discount: { type: o.discountType as "flat" | "percent", value: o.discountValue },
     subtotal: o.subtotal,
     discountTotal: o.discountTotal,
@@ -60,6 +63,7 @@ export function orderDto(o: FullOrder, cashierName?: string) {
       cgst: i.cgst,
       sgst: i.sgst,
       igst: i.igst,
+      taxes: asTaxes(i.taxes),
       total: i.total,
       returnedQtyMilli: i.returnedQtyMilli,
       batches: i.batches.map((b) => ({ batchNo: b.batch.batchNo, expiry: b.batch.expiry ? b.batch.expiry.toISOString().slice(0, 10) : null, qtyMilli: b.qtyMilli })),
@@ -74,6 +78,7 @@ export function orderDto(o: FullOrder, cashierName?: string) {
       cgstTotal: c.cgstTotal,
       sgstTotal: c.sgstTotal,
       igstTotal: c.igstTotal,
+      taxTotals: sumTaxes(c.items.map((i) => asTaxes(i.taxes))),
       total: c.total,
       createdAt: c.createdAt.toISOString(),
       items: c.items.map((i) => ({ orderItemId: i.orderItemId, qtyMilli: i.qtyMilli, total: i.total })),
@@ -126,11 +131,14 @@ export function ordersRouter(ctx: Ctx): Router {
     const missing = ids.filter((id) => !byId.has(id));
     if (missing.length) throw new AppError(400, "unknown_product", "Some items are no longer sold. Remove them and try again.", { productIds: missing });
 
-    const pos = placeOfSupply(account.taxEnabled ? branch.stateCode : null, account.taxEnabled ? (customer?.stateCode ?? null) : null);
+    // Place of supply and the CGST/SGST/IGST split are India GST only.
+    const gst = account.taxEnabled && account.taxMode === "INDIA_GST";
+    const pos = placeOfSupply(gst ? branch.stateCode : null, gst ? (customer?.stateCode ?? null) : null);
     const discount: Discount = body.discount ?? { type: "flat", value: 0 };
+    const groups = account.taxMode === "CUSTOM" ? await ctx.prisma.taxGroup.findMany({ where: { accountId: account.id } }) : [];
     const lines = body.lines.map((l) => {
       const p = byId.get(l.productId)!;
-      return { unitPrice: p.branches[0]?.price ?? p.price, qtyMilli: l.qtyMilli, gstRateBp: p.gstRateBp, taxInclusive: p.taxInclusive };
+      return { unitPrice: p.branches[0]?.price ?? p.price, qtyMilli: l.qtyMilli, gstRateBp: p.gstRateBp, taxInclusive: p.taxInclusive, taxes: productTaxes(account.taxMode, p.taxGroupId, groups) };
     });
     const bill = computeBill(lines, discount, { taxEnabled: account.taxEnabled, interState: pos.interState });
 
@@ -187,6 +195,7 @@ export function ordersRouter(ctx: Ctx): Router {
           placeOfSupply: pos.placeOfSupply,
           interState: pos.interState,
           taxEnabled: account.taxEnabled,
+          taxMode: account.taxMode,
           discount,
           bill,
           lines: body.lines.map((l) => {
@@ -307,7 +316,7 @@ export function ordersRouter(ctx: Ctx): Router {
       const item = itemById.get(orderItemId);
       if (!item) throw new AppError(400, "bad_item", "That item isn't on this bill.");
       if (qtyMilli > item.qtyMilli - item.returnedQtyMilli) throw new AppError(400, "too_many", `Only ${(item.qtyMilli - item.returnedQtyMilli) / 1000} of ${item.name} can still be returned.`);
-      return { item, qtyMilli, amounts: returnAmounts(item, item.returnedQtyMilli, qtyMilli) };
+      return { item, qtyMilli, amounts: returnAmounts({ ...item, taxes: asTaxes(item.taxes) }, item.returnedQtyMilli, qtyMilli) };
     });
     const sum = (k: "taxable" | "cgst" | "sgst" | "igst" | "total") => lines.reduce((s, l) => s + l.amounts[k], 0);
     const tracked = new Set((await ctx.prisma.product.findMany({ where: { id: { in: lines.map((l) => l.item.productId!).filter(Boolean) }, trackStock: true }, select: { id: true } })).map((p) => p.id));

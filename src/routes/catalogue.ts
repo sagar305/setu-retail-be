@@ -2,10 +2,11 @@ import { Router } from "express";
 import type { Ctx } from "../context.js";
 import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } from "../auth/middleware.js";
 import type { Db } from "../db/types.js";
-import type { BranchProduct, InventoryChange, Prisma, Product } from "../generated/prisma/client.js";
+import type { Account, BranchProduct, InventoryChange, Prisma, Product } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
 import { mergeFields, offlineMeta, recordClashes, recordRemovedEdit } from "../services/conflicts.js";
 import { changes } from "../lib/diff.js";
+import { itemCodeError } from "../lib/taxes.js";
 import { BatchBody, BatchPatchBody, BranchPriceBody, CategoryBody, ProductBody, ProductPatchBody, StockAdjustBody } from "../schemas2.js";
 import { addToOpeningBatch, expiryStatus, fromDay, reconcileBatches, sortFefo, takeFromBatches, toDay } from "../services/batches.js";
 import { audit } from "../services/audit.js";
@@ -24,6 +25,7 @@ export function productDto(p: Product, bp: BranchProduct | undefined, showCost: 
     barcode: p.barcode,
     hsn: p.hsn,
     gstRateBp: p.gstRateBp,
+    taxGroupId: p.taxGroupId,
     taxInclusive: p.taxInclusive,
     unit: p.unit,
     defaultPrice: p.price,
@@ -38,6 +40,15 @@ export function productDto(p: Product, bp: BranchProduct | undefined, showCost: 
     archived: p.archivedAt !== null,
     nextExpiry: nextExpiry ?? null,
   } as const;
+}
+
+/** HSN format (India GST) and that the tax group is this shop's. */
+async function checkProductTax(ctx: Ctx, account: Account, body: { hsn?: string; taxGroupId?: string | null }) {
+  const err = itemCodeError(account.taxMode, body.hsn, account.itemCodeLabel || "HSN");
+  if (err) throw new AppError(400, "invalid_item_code", err);
+  if (body.taxGroupId && !(await ctx.prisma.taxGroup.findFirst({ where: { id: body.taxGroupId, accountId: account.id, archivedAt: null } }))) {
+    throw new AppError(400, "bad_tax_group", "Tax group not found.");
+  }
 }
 
 /** Change a branch's stock and log why. Returns the new stock (milli). */
@@ -169,6 +180,7 @@ export function catalogueRouter(ctx: Ctx): Router {
   router.post("/products", OM, async (req, res) => {
     const a = auth(req);
     const { openingStock, ...body } = ProductBody.parse(req.body);
+    await checkProductTax(ctx, a.account, body);
     for (const o of openingStock ?? []) branchFor(a, o.branchId, true);
     if (body.categoryId && !(await ctx.prisma.category.findFirst({ where: { id: body.categoryId, accountId: a.account.id } }))) {
       throw new AppError(400, "bad_category", "Category not found.");
@@ -195,6 +207,7 @@ export function catalogueRouter(ctx: Ctx): Router {
     const a = auth(req);
     const p = await findProduct(ctx, a, req.params.id);
     const parsed = ProductPatchBody.parse(req.body);
+    await checkProductTax(ctx, a.account, parsed);
     const { base, changedAt } = offlineMeta(req);
     const subject = { entityType: "product" as const, entityId: p.id, label: p.name };
     if (base && p.archivedAt) {

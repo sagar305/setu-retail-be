@@ -935,6 +935,25 @@
           },
           "printUpiQrOnReceipt": {
             "type": "boolean"
+          },
+          "taxMode": {
+            "type": "string",
+            "enum": [
+              "INDIA_GST",
+              "CUSTOM"
+            ]
+          },
+          "taxLabel": {
+            "type": "string"
+          },
+          "taxNumberLabel": {
+            "type": "string"
+          },
+          "itemCodeLabel": {
+            "type": "string"
+          },
+          "invoiceTitle": {
+            "type": "string"
           }
         },
         "required": [
@@ -949,7 +968,12 @@
           "creditDays",
           "logoDataUrl",
           "upiId",
-          "printUpiQrOnReceipt"
+          "printUpiQrOnReceipt",
+          "taxMode",
+          "taxLabel",
+          "taxNumberLabel",
+          "itemCodeLabel",
+          "invoiceTitle"
         ]
       },
       "PaymentMethod": {
@@ -1065,6 +1089,13 @@
           "gstRateBp": {
             "type": "integer"
           },
+          "taxGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
           "taxInclusive": {
             "type": "boolean"
           },
@@ -1128,6 +1159,7 @@
           "barcode",
           "hsn",
           "gstRateBp",
+          "taxGroupId",
           "taxInclusive",
           "unit",
           "defaultPrice",
@@ -1328,6 +1360,35 @@
           "taxEnabled": {
             "type": "boolean"
           },
+          "taxMode": {
+            "type": "string",
+            "enum": [
+              "INDIA_GST",
+              "CUSTOM"
+            ]
+          },
+          "taxTotals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rateBp": {
+                  "type": "integer"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "rateBp",
+                "amount"
+              ]
+            }
+          },
           "discount": {
             "type": "object",
             "properties": {
@@ -1449,6 +1510,28 @@
                 "total": {
                   "type": "integer"
                 },
+                "taxes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "rateBp": {
+                        "type": "integer"
+                      },
+                      "amount": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp",
+                      "amount"
+                    ]
+                  }
+                },
                 "returnedQtyMilli": {
                   "type": "integer"
                 },
@@ -1495,6 +1578,7 @@
                 "sgst",
                 "igst",
                 "total",
+                "taxes",
                 "returnedQtyMilli",
                 "batches"
               ]
@@ -1567,6 +1651,28 @@
                 "igstTotal": {
                   "type": "integer"
                 },
+                "taxTotals": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "rateBp": {
+                        "type": "integer"
+                      },
+                      "amount": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp",
+                      "amount"
+                    ]
+                  }
+                },
                 "total": {
                   "type": "integer"
                 },
@@ -1607,6 +1713,7 @@
                 "cgstTotal",
                 "sgstTotal",
                 "igstTotal",
+                "taxTotals",
                 "total",
                 "createdAt",
                 "items"
@@ -1627,6 +1734,8 @@
           "placeOfSupply",
           "interState",
           "taxEnabled",
+          "taxMode",
+          "taxTotals",
           "discount",
           "subtotal",
           "discountTotal",
@@ -1936,12 +2045,19 @@
           },
           "hsn": {
             "type": "string",
-            "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+            "pattern": "^[A-Za-z0-9.-]{0,20}$"
           },
           "gstRateBp": {
             "type": "integer",
             "minimum": 0,
             "maximum": 10000
+          },
+          "taxGroupId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
           },
           "taxInclusive": {
             "type": "boolean"
@@ -1997,6 +2113,53 @@
         "required": [
           "name",
           "price"
+        ]
+      },
+      "TaxGroup": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "taxes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rateBp": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "rateBp"
+              ]
+            }
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "rateBp": {
+            "type": "integer"
+          },
+          "products": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "taxes",
+          "isDefault",
+          "rateBp",
+          "products"
         ]
       },
       "Batch": {
@@ -2079,7 +2242,7 @@
           },
           "hsn": {
             "type": "string",
-            "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+            "pattern": "^[A-Za-z0-9.-]{0,20}$"
           },
           "gstRateBp": {
             "type": "integer",
@@ -2143,7 +2306,7 @@
           },
           "gstin": {
             "type": "string",
-            "maxLength": 15
+            "maxLength": 30
           },
           "stateCode": {
             "type": "string",
@@ -3169,6 +3332,122 @@
           "expiringSoon"
         ]
       },
+      "TaxReport": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          },
+          "bills": {
+            "type": "integer"
+          },
+          "taxableSales": {
+            "type": "integer"
+          },
+          "totalSales": {
+            "type": "integer"
+          },
+          "byTax": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rateBp": {
+                  "type": "integer"
+                },
+                "sales": {
+                  "type": "integer"
+                },
+                "returns": {
+                  "type": "integer"
+                },
+                "collected": {
+                  "type": "integer"
+                },
+                "purchases": {
+                  "type": "integer"
+                },
+                "purchaseReturns": {
+                  "type": "integer"
+                },
+                "paid": {
+                  "type": "integer"
+                },
+                "net": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "rateBp",
+                "sales",
+                "returns",
+                "collected",
+                "purchases",
+                "purchaseReturns",
+                "paid",
+                "net"
+              ]
+            }
+          },
+          "invoices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "invoiceNumber": {
+                  "type": "string"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "customerName": {
+                  "type": "string"
+                },
+                "customerTaxNumber": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "taxable": {
+                  "type": "integer"
+                },
+                "tax": {
+                  "type": "integer"
+                },
+                "total": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "invoiceNumber",
+                "date",
+                "customerName",
+                "customerTaxNumber",
+                "taxable",
+                "tax",
+                "total"
+              ]
+            }
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "bills",
+          "taxableSales",
+          "totalSales",
+          "byTax",
+          "invoices"
+        ]
+      },
       "SyncOrder": {
         "type": "object",
         "properties": {
@@ -3196,6 +3475,13 @@
           },
           "taxEnabled": {
             "type": "boolean"
+          },
+          "taxMode": {
+            "type": "string",
+            "enum": [
+              "INDIA_GST",
+              "CUSTOM"
+            ]
           },
           "discount": {
             "type": "object",
@@ -3236,7 +3522,7 @@
                 },
                 "hsn": {
                   "type": "string",
-                  "maxLength": 8
+                  "maxLength": 20
                 },
                 "unit": {
                   "type": "string",
@@ -3254,6 +3540,29 @@
                 },
                 "taxInclusive": {
                   "type": "boolean"
+                },
+                "taxes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 30
+                      },
+                      "rateBp": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp"
+                    ]
+                  },
+                  "maxItems": 5
                 },
                 "qtyMilli": {
                   "type": "integer",
@@ -3344,7 +3653,7 @@
           },
           "gstin": {
             "type": "string",
-            "maxLength": 15
+            "maxLength": 30
           },
           "stateCode": {
             "type": "string",
@@ -3718,6 +4027,12 @@
                 "isDefault"
               ]
             }
+          },
+          "taxGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaxGroup"
+            }
           }
         },
         "required": [
@@ -3736,7 +4051,8 @@
           "customerBalances",
           "suppliers",
           "expenseCategories",
-          "receiptTemplates"
+          "receiptTemplates",
+          "taxGroups"
         ]
       },
       "SyncMoneyOp": {
@@ -4294,6 +4610,13 @@
           "interState": {
             "type": "boolean"
           },
+          "taxMode": {
+            "type": "string",
+            "enum": [
+              "INDIA_GST",
+              "CUSTOM"
+            ]
+          },
           "taxableTotal": {
             "type": "integer"
           },
@@ -4339,6 +4662,28 @@
           "createdAt": {
             "type": "string"
           },
+          "taxTotals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rateBp": {
+                  "type": "integer"
+                },
+                "amount": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "rateBp",
+                "amount"
+              ]
+            }
+          },
           "items": {
             "type": "array",
             "items": {
@@ -4383,6 +4728,28 @@
                 "igst": {
                   "type": "integer"
                 },
+                "taxes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "rateBp": {
+                        "type": "integer"
+                      },
+                      "amount": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp",
+                      "amount"
+                    ]
+                  }
+                },
                 "total": {
                   "type": "integer"
                 },
@@ -4412,6 +4779,7 @@
                 "cgst",
                 "sgst",
                 "igst",
+                "taxes",
                 "total",
                 "batchNo",
                 "expiry",
@@ -4466,6 +4834,28 @@
                 "igstTotal": {
                   "type": "integer"
                 },
+                "taxTotals": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "rateBp": {
+                        "type": "integer"
+                      },
+                      "amount": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp",
+                      "amount"
+                    ]
+                  }
+                },
                 "total": {
                   "type": "integer"
                 },
@@ -4501,6 +4891,28 @@
                       "igst": {
                         "type": "integer"
                       },
+                      "taxes": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "name": {
+                              "type": "string"
+                            },
+                            "rateBp": {
+                              "type": "integer"
+                            },
+                            "amount": {
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "rateBp",
+                            "amount"
+                          ]
+                        }
+                      },
                       "total": {
                         "type": "integer"
                       }
@@ -4514,6 +4926,7 @@
                       "cgst",
                       "sgst",
                       "igst",
+                      "taxes",
                       "total"
                     ]
                   }
@@ -4530,6 +4943,7 @@
                 "cgstTotal",
                 "sgstTotal",
                 "igstTotal",
+                "taxTotals",
                 "total",
                 "items"
               ]
@@ -4545,6 +4959,7 @@
           "billDate",
           "dueDate",
           "interState",
+          "taxMode",
           "taxableTotal",
           "cgstTotal",
           "sgstTotal",
@@ -4559,6 +4974,7 @@
           "cancelledAt",
           "cancelReason",
           "createdAt",
+          "taxTotals",
           "items",
           "returns"
         ]
@@ -4592,6 +5008,13 @@
           },
           "interState": {
             "type": "boolean"
+          },
+          "taxMode": {
+            "type": "string",
+            "enum": [
+              "INDIA_GST",
+              "CUSTOM"
+            ]
           },
           "taxableTotal": {
             "type": "integer"
@@ -4651,6 +5074,7 @@
           "billDate",
           "dueDate",
           "interState",
+          "taxMode",
           "taxableTotal",
           "cgstTotal",
           "sgstTotal",
@@ -4717,7 +5141,7 @@
                 },
                 "hsn": {
                   "type": "string",
-                  "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                  "pattern": "^[A-Za-z0-9.-]{0,20}$"
                 },
                 "qtyMilli": {
                   "type": "integer",
@@ -4733,6 +5157,29 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 10000
+                },
+                "taxes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 30
+                      },
+                      "rateBp": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 10000
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rateBp"
+                    ]
+                  },
+                  "maxItems": 5
                 },
                 "batchNo": {
                   "type": "string",
@@ -8490,7 +8937,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 15
+                        "maxLength": 30
                       },
                       {
                         "type": "string",
@@ -8598,7 +9045,7 @@
                     "anyOf": [
                       {
                         "type": "string",
-                        "maxLength": 15
+                        "maxLength": 30
                       },
                       {
                         "type": "string",
@@ -9115,6 +9562,38 @@
                   "printUpiQrOnReceipt": {
                     "type": "boolean"
                   },
+                  "taxMode": {
+                    "type": "string",
+                    "enum": [
+                      "INDIA_GST",
+                      "CUSTOM"
+                    ]
+                  },
+                  "taxLabel": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20
+                  },
+                  "taxNumberLabel": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 20
+                  },
+                  "itemCodeLabel": {
+                    "type": "string",
+                    "maxLength": 20
+                  },
+                  "invoiceTitle": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40
+                  },
+                  "currency": {
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  },
                   "logoDataUrl": {
                     "type": [
                       "string",
@@ -9138,6 +9617,290 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tax-groups": {
+      "get": {
+        "summary": "Tax groups (custom tax mode); products counts the ones that use each",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "groups": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/TaxGroup"
+                      }
+                    }
+                  },
+                  "required": [
+                    "groups"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a tax group (owner); the first one is the default",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "taxes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 30
+                        },
+                        "rateBp": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "rateBp"
+                      ]
+                    },
+                    "maxItems": 5
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "name",
+                  "taxes"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "$ref": "#/components/schemas/TaxGroup"
+                    }
+                  },
+                  "required": [
+                    "group"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tax-groups/{id}": {
+      "patch": {
+        "summary": "Edit a tax group or make it the default (owner); bills keep their taxes",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 120
+                  },
+                  "taxes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 30
+                        },
+                        "rateBp": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10000
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "rateBp"
+                      ]
+                    },
+                    "maxItems": 5
+                  },
+                  "isDefault": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "$ref": "#/components/schemas/TaxGroup"
+                    }
+                  },
+                  "required": [
+                    "group"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a tax group (owner); its products use the default group",
+        "tags": [
+          "settings"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No content"
           },
           "400": {
             "description": "Invalid request",
@@ -9930,12 +10693,19 @@
                   },
                   "hsn": {
                     "type": "string",
-                    "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                    "pattern": "^[A-Za-z0-9.-]{0,20}$"
                   },
                   "gstRateBp": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 10000
+                  },
+                  "taxGroupId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
                   },
                   "taxInclusive": {
                     "type": "boolean"
@@ -10166,12 +10936,19 @@
                   },
                   "hsn": {
                     "type": "string",
-                    "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                    "pattern": "^[A-Za-z0-9.-]{0,20}$"
                   },
                   "gstRateBp": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 10000
+                  },
+                  "taxGroupId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "format": "uuid"
                   },
                   "taxInclusive": {
                     "type": "boolean"
@@ -10649,7 +11426,7 @@
                   },
                   "gstin": {
                     "type": "string",
-                    "maxLength": 15
+                    "maxLength": 30
                   },
                   "stateCode": {
                     "anyOf": [
@@ -10824,7 +11601,7 @@
                   },
                   "gstin": {
                     "type": "string",
-                    "maxLength": 15
+                    "maxLength": 30
                   },
                   "stateCode": {
                     "anyOf": [
@@ -11987,6 +12764,51 @@
         }
       }
     },
+    "/reports/taxes": {
+      "get": {
+        "summary": "Custom taxes: collected on sales and paid on supplier bills, by tax and rate, net of returns (?from=&to= ISO instants, ?branchId=)",
+        "tags": [
+          "reports"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/reports/gst": {
       "get": {
         "summary": "GST by rate (returns netted), by HSN, B2B/B2C, credit notes (?from=&to= ISO instants, ?branchId=)",
@@ -12772,7 +13594,7 @@
                         },
                         "gstin": {
                           "type": "string",
-                          "maxLength": 15
+                          "maxLength": 30
                         },
                         "stateCode": {
                           "type": "string",
@@ -13078,7 +13900,7 @@
                   },
                   "gstin": {
                     "type": "string",
-                    "maxLength": 15
+                    "maxLength": 30
                   },
                   "stateCode": {
                     "type": "string",
@@ -13225,7 +14047,7 @@
                   },
                   "gstin": {
                     "type": "string",
-                    "maxLength": 15
+                    "maxLength": 30
                   },
                   "stateCode": {
                     "type": "string",
@@ -14910,7 +15732,7 @@
                         },
                         "hsn": {
                           "type": "string",
-                          "pattern": "^(\\d{4}|\\d{6}|\\d{8})?$"
+                          "pattern": "^[A-Za-z0-9.-]{0,20}$"
                         },
                         "qtyMilli": {
                           "type": "integer",
@@ -14926,6 +15748,29 @@
                           "type": "integer",
                           "minimum": 0,
                           "maximum": 10000
+                        },
+                        "taxes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 30
+                              },
+                              "rateBp": {
+                                "type": "integer",
+                                "minimum": 0,
+                                "maximum": 10000
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "rateBp"
+                            ]
+                          },
+                          "maxItems": 5
                         },
                         "batchNo": {
                           "type": "string",

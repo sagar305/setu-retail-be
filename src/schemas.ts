@@ -39,7 +39,7 @@ export const BranchBody = z.object({
   name: Name,
   address: z.string().trim().max(300).optional(),
   phone: z.string().trim().max(20).optional(),
-  gstin: z.string().trim().max(15).optional().or(z.literal("")),
+  gstin: z.string().trim().max(30).optional().or(z.literal("")),
   stateCode: z
     .string()
     .trim()

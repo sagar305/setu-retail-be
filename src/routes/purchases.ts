@@ -8,7 +8,8 @@ import type { Account, Prisma } from "../generated/prisma/client.js";
 import type { Db } from "../db/types.js";
 import { AppError } from "../http/errors.js";
 import { computePurchase } from "../lib/books.js";
-import { placeOfSupply, returnAmounts } from "../lib/gst.js";
+import { placeOfSupply, returnAmounts, sumTaxes } from "../lib/gst.js";
+import { asTaxes, productTaxes } from "../lib/taxes.js";
 import { audit } from "../services/audit.js";
 import { requireTool } from "../services/books.js";
 import { fromDay, reconcileBatches, toDay } from "../services/batches.js";
@@ -31,6 +32,7 @@ const purchaseSummary = (p: Omit<FullPurchase, "items" | "returns"> & { returns:
   billDate: toDay(p.billDate)!,
   dueDate: toDay(p.dueDate),
   interState: p.interState,
+  taxMode: p.taxMode,
   taxableTotal: p.taxableTotal,
   cgstTotal: p.cgstTotal,
   sgstTotal: p.sgstTotal,
@@ -50,6 +52,7 @@ const purchaseSummary = (p: Omit<FullPurchase, "items" | "returns"> & { returns:
 export const purchaseDto = (p: FullPurchase) => ({
   ...purchaseSummary(p),
   returnedTotal: creditNoteTotal(p),
+  taxTotals: sumTaxes(p.items.map((i) => asTaxes(i.taxes))),
   items: p.items.map((i) => ({
     id: i.id,
     productId: i.productId,
@@ -63,6 +66,7 @@ export const purchaseDto = (p: FullPurchase) => ({
     cgst: i.cgst,
     sgst: i.sgst,
     igst: i.igst,
+    taxes: asTaxes(i.taxes),
     total: i.total,
     batchNo: i.batchNo,
     expiry: toDay(i.expiry),
@@ -79,8 +83,9 @@ export const purchaseDto = (p: FullPurchase) => ({
     cgstTotal: r.cgstTotal,
     sgstTotal: r.sgstTotal,
     igstTotal: r.igstTotal,
+    taxTotals: sumTaxes(r.items.map((x) => asTaxes(x.taxes))),
     total: r.total,
-    items: r.items.map((x) => ({ id: x.id, purchaseItemId: x.purchaseItemId, name: x.name, qtyMilli: x.qtyMilli, taxable: x.taxable, cgst: x.cgst, sgst: x.sgst, igst: x.igst, total: x.total })),
+    items: r.items.map((x) => ({ id: x.id, purchaseItemId: x.purchaseItemId, name: x.name, qtyMilli: x.qtyMilli, taxable: x.taxable, cgst: x.cgst, sgst: x.sgst, igst: x.igst, taxes: asTaxes(x.taxes), total: x.total })),
   })),
 });
 
@@ -162,14 +167,17 @@ export function purchasesRouter(ctx: Ctx): Router {
     const products = await ctx.prisma.product.findMany({ where: { id: { in: ids }, accountId: account.id, archivedAt: null } });
     const byId = new Map(products.map((p) => [p.id, p]));
     if (ids.some((id) => !byId.has(id))) throw new AppError(400, "unknown_product", "Some items are no longer in the catalogue.");
+    const groups = account.taxMode === "CUSTOM" ? await ctx.prisma.taxGroup.findMany({ where: { accountId: account.id } }) : [];
     const lines = body.lines.map((l, i) => {
       const p = l.productId ? byId.get(l.productId) : undefined;
       const name = l.name || p?.name;
       if (!name) throw new AppError(400, "validation_error", `Line ${i + 1}: pick a product or type what it is.`);
-      return { ...l, product: p, name, hsn: l.hsn ?? p?.hsn ?? "", unit: p?.unit ?? "pcs" };
+      // Custom taxes: as entered on the line, else the product's tax group.
+      const taxes = account.taxMode === "CUSTOM" ? (l.taxes ?? productTaxes("CUSTOM", p?.taxGroupId ?? null, groups) ?? []) : undefined;
+      return { ...l, taxes, product: p, name, hsn: l.hsn ?? p?.hsn ?? "", unit: p?.unit ?? "pcs" };
     });
 
-    const { interState } = placeOfSupply(branch.stateCode, supplier.stateCode);
+    const { interState } = account.taxMode === "INDIA_GST" ? placeOfSupply(branch.stateCode, supplier.stateCode) : { interState: false };
     const bill = computePurchase(lines, interState);
     if (body.expectedTotal !== undefined && body.expectedTotal !== bill.total) throw new AppError(409, "total_mismatch", "The bill total changed. Check it and save again.", { total: bill.total });
     if (body.paidAmount > bill.total) throw new AppError(400, "overpaid", "Paid can't be more than the bill total.");
@@ -188,6 +196,7 @@ export function purchasesRouter(ctx: Ctx): Router {
           billDate: fromDay(body.billDate),
           dueDate: body.dueDate ? fromDay(body.dueDate) : null,
           interState,
+          taxMode: account.taxMode,
           taxableTotal: bill.taxableTotal,
           cgstTotal: bill.cgstTotal,
           sgstTotal: bill.sgstTotal,
@@ -206,7 +215,7 @@ export function purchasesRouter(ctx: Ctx): Router {
         const l = lines[i]!;
         const amt = bill.lines[i]!;
         const p = l.product;
-        const cost = effectiveCost(account, l.unitCost, l.gstRateBp);
+        const cost = effectiveCost(account, l.unitCost, amt.gstRateBp);
         let batchId: string | null = null;
         if (p?.trackStock) {
           await moveStock(tx, { at: ctx.now(), accountId: account.id, branchId: branch.id, productId: p.id, change: l.qtyMilli, type: "PURCHASE", refId: body.id, note: `Bill ${body.billNumber} · ${supplier.name}`, userId: a.user.id });
@@ -227,11 +236,12 @@ export function purchasesRouter(ctx: Ctx): Router {
             unit: l.unit,
             qtyMilli: l.qtyMilli,
             unitCost: l.unitCost,
-            gstRateBp: l.gstRateBp,
+            gstRateBp: amt.gstRateBp,
             taxable: amt.taxable,
             cgst: amt.cgst,
             sgst: amt.sgst,
             igst: amt.igst,
+            taxes: amt.taxes,
             total: amt.total,
             batchId,
             batchNo: l.batchNo ?? "",
@@ -289,7 +299,7 @@ export function purchasesRouter(ctx: Ctx): Router {
       const tracked = new Set((await tx.product.findMany({ where: { id: { in: [...wanted.keys()].map((id) => items.get(id)!.productId).filter((x): x is string => Boolean(x)) }, trackStock: true }, select: { id: true } })).map((t) => t.id));
       const lines = [...wanted].map(([id, q]) => {
         const i = items.get(id)!;
-        return { item: i, qtyMilli: q, amounts: returnAmounts(i, i.returnedQtyMilli, q) };
+        return { item: i, qtyMilli: q, amounts: returnAmounts({ ...i, taxes: asTaxes(i.taxes) }, i.returnedQtyMilli, q) };
       });
       const sum = (k: "taxable" | "cgst" | "sgst" | "igst" | "total") => lines.reduce((s, l) => s + l.amounts[k], 0);
       await tx.purchaseReturn.create({

@@ -14,10 +14,11 @@ import { customerDto } from "./customers.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { AppError } from "../http/errors.js";
 import { computeBill, placeOfSupply } from "../lib/gst.js";
-import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
+import { parseTaxNumber, stateFromTaxNumber, TaxPartSchema } from "../lib/taxes.js";
+import { normalizePhone } from "../lib/normalize.js";
 import { verifyPassword } from "../lib/password.js";
 import { makePinVerifier, PIN_PATTERN } from "../lib/pin.js";
-import { settingsDto } from "./settings.js";
+import { settingsDto, taxGroupDto } from "./settings.js";
 import { audit } from "../services/audit.js";
 import { invoiceSeq, persistOrder } from "../services/orderWriter.js";
 import { DiscountBody } from "../schemas2.js";
@@ -34,7 +35,7 @@ export const SyncCustomer = z.object({
   id: z.uuid(),
   name: z.string().trim().min(1).max(120),
   phone: z.string().trim().max(20).optional(),
-  gstin: z.string().trim().max(15).optional(),
+  gstin: z.string().trim().max(30).optional(),
   stateCode: z.string().trim().max(2).optional(),
 });
 export const SyncOrder = z.object({
@@ -44,17 +45,21 @@ export const SyncOrder = z.object({
   createdAt: z.iso.datetime(),
   customerId: z.uuid().nullable().optional(),
   taxEnabled: z.boolean(),
+  /** The tax mode the device billed in; CUSTOM lines carry their taxes. Older devices: India GST. */
+  taxMode: z.enum(["INDIA_GST", "CUSTOM"]).optional(),
   discount: DiscountBody,
   lines: z
     .array(
       z.object({
         productId: z.uuid().nullable(),
         name: z.string().min(1).max(200),
-        hsn: z.string().max(8),
+        hsn: z.string().max(20),
         unit: z.string().max(20),
         unitPrice: Paise,
         gstRateBp: z.number().int().min(0).max(10_000),
         taxInclusive: z.boolean(),
+        /** CUSTOM tax mode: the line's taxes as the device had them. */
+        taxes: z.array(TaxPartSchema).max(5).optional(),
         qtyMilli: z.number().int().min(1),
         batchId: z.uuid().nullable().optional(),
       }),
@@ -140,6 +145,7 @@ export function syncRouter(ctx: Ctx): Router {
       toolOn(account, "expense-tracker") ? ctx.prisma.expense.groupBy({ by: ["category"], where: { accountId: account.id, deletedAt: null } }) : Promise.resolve([]),
       toolOn(account, "receipt-designer") ? ctx.prisma.receiptTemplate.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { createdAt: "asc" } }) : Promise.resolve([]),
     ]);
+    const taxGroups = account.taxMode === "CUSTOM" ? await ctx.prisma.taxGroup.findMany({ where: { accountId: account.id, archivedAt: null }, orderBy: { name: "asc" } }) : [];
     const supplierOwed = suppliers.length ? await supplierBalances(ctx.prisma, account.id, suppliers.map((x) => x.id)) : new Map<string, number>();
     const expenseCategories = [...DEFAULT_EXPENSE_CATEGORIES];
     for (const u of usedCategories) if (!expenseCategories.some((c) => c.toLowerCase() === u.category.toLowerCase())) expenseCategories.push(u.category);
@@ -166,6 +172,7 @@ export function syncRouter(ctx: Ctx): Router {
       suppliers: suppliers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, balance: supplierOwed.get(x.id) ?? 0 })),
       expenseCategories,
       receiptTemplates: templates.map(templateDto),
+      taxGroups: taxGroups.map((g) => taxGroupDto(g)),
     });
   });
 
@@ -181,10 +188,9 @@ export function syncRouter(ctx: Ctx): Router {
         continue;
       }
       const phone = c.phone ? (normalizePhone(c.phone) ?? "") : "";
-      const g = c.gstin ? normalizeTaxNumber(c.gstin) : null;
-      const gstin = g && GSTIN_PATTERN.test(g) ? g : null;
+      const gstin = c.gstin ? parseTaxNumber(account, c.gstin) : null;
       // Created offline already: plan limits aren't applied after the fact.
-      await ctx.prisma.customer.create({ data: { id: c.id, accountId: account.id, name: c.name, phone, gstin, stateCode: c.stateCode || gstin?.slice(0, 2) || null } });
+      await ctx.prisma.customer.create({ data: { id: c.id, accountId: account.id, name: c.name, phone, gstin, stateCode: c.stateCode || stateFromTaxNumber(account, gstin) || null } });
       results.push({ id: c.id, status: "saved" });
     }
     const added = results.filter((r) => r.status === "saved").length;
@@ -226,8 +232,15 @@ export function syncRouter(ctx: Ctx): Router {
         const byId = new Map(methods.map((m) => [m.id, m]));
         if (o.payments.some((p) => !byId.has(p.methodId))) throw new AppError(400, "bad_payment_method", "Unknown payment method.");
 
-        const pos = placeOfSupply(o.taxEnabled ? branch.stateCode : null, o.taxEnabled ? (customer?.stateCode ?? null) : null);
-        const bill = computeBill(o.lines, o.discount, { taxEnabled: o.taxEnabled, interState: pos.interState });
+        // The bill is worked out exactly as the device did, in the mode it billed in.
+        const taxMode = o.taxMode ?? "INDIA_GST";
+        const gst = o.taxEnabled && taxMode === "INDIA_GST";
+        const pos = placeOfSupply(gst ? branch.stateCode : null, gst ? (customer?.stateCode ?? null) : null);
+        const bill = computeBill(
+          o.lines.map((l) => ({ ...l, taxes: taxMode === "CUSTOM" ? (l.taxes ?? []) : undefined })),
+          o.discount,
+          { taxEnabled: o.taxEnabled, interState: pos.interState },
+        );
         const paid = o.payments.reduce((s, p) => s + p.amount, 0);
         if (bill.total !== o.total || paid !== o.total) throw new AppError(400, "total_mismatch", `Bill adds up to ${bill.total}, payments ${paid}, device said ${o.total}.`);
 
@@ -253,6 +266,7 @@ export function syncRouter(ctx: Ctx): Router {
             placeOfSupply: pos.placeOfSupply,
             interState: pos.interState,
             taxEnabled: o.taxEnabled,
+            taxMode,
             discount: o.discount,
             bill,
             lines: o.lines.map((l) => {

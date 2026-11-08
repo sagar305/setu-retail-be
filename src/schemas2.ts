@@ -2,11 +2,14 @@
 import "./zodOpenApi.js";
 import { z } from "zod";
 import { ToolsPatch } from "./schemas4.js";
+import { ItemCode, TaxPartsSchema, validCurrency, validTimeZone } from "./lib/taxes.js";
 
 const Name = z.string().trim().min(1, "Required.").max(120);
 const Paise = z.number().int().min(0).max(1_000_000_000);
 const Milli = z.number().int();
 const Text = (max: number) => z.string().trim().max(max);
+
+export const TaxAmountDto = z.object({ name: z.string(), rateBp: z.number().int(), amount: z.number().int() });
 
 export const SettingsPatchBody = z.object({
   taxEnabled: z.boolean().optional(),
@@ -23,6 +26,17 @@ export const SettingsPatchBody = z.object({
   /** The shop's UPI ID, e.g. sharmastores@okaxis; "" to remove. */
   upiId: z.union([z.literal(""), z.string().trim().regex(/^[a-z0-9._-]{2,256}@[a-z][a-z0-9.-]{1,63}$/i, "Enter a UPI ID like shopname@okaxis.")]).optional(),
   printUpiQrOnReceipt: z.boolean().optional(),
+  /** India GST, or the shop's own taxes (tax groups) for any country. */
+  taxMode: z.enum(["INDIA_GST", "CUSTOM"]).optional(),
+  taxLabel: z.string().trim().min(1, "Give the tax a name.").max(20).optional(),
+  taxNumberLabel: z.string().trim().min(1, "Give the tax number a name.").max(20).optional(),
+  /** "" hides the item code. */
+  itemCodeLabel: z.string().trim().max(20).optional(),
+  invoiceTitle: z.string().trim().min(1, "Give the receipt a heading.").max(40).optional(),
+  /** ISO 4217, e.g. INR, USD, AED. */
+  currency: z.string().trim().toUpperCase().refine(validCurrency, "Pick a currency like INR, USD or AED.").optional(),
+  /** IANA time zone, e.g. Asia/Kolkata, Asia/Dubai. */
+  timezone: z.string().trim().refine(validTimeZone, "Pick a time zone like Asia/Dubai.").optional(),
   logoDataUrl: z.string().max(200_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/, "Use a PNG, JPEG or WebP image.").nullable().optional(),
 });
 
@@ -45,8 +59,10 @@ export const ProductBody = z.object({
   categoryId: z.uuid().nullable().optional(),
   sku: Text(60).optional(),
   barcode: Text(60).optional(),
-  hsn: z.string().trim().regex(/^(\d{4}|\d{6}|\d{8})?$/, "HSN is 4, 6 or 8 digits.").optional(),
+  hsn: ItemCode.optional(),
   gstRateBp: z.number().int().min(0).max(10_000).optional(),
+  /** Custom tax mode: its tax group (null = the default group). */
+  taxGroupId: z.uuid().nullable().optional(),
   taxInclusive: z.boolean().optional(),
   unit: Text(20).optional(),
   price: Paise,
@@ -83,7 +99,7 @@ export const CustomerBody = z.object({
   phone: Text(20).optional(),
   email: z.union([z.email(), z.literal("")]).optional(),
   address: Text(300).optional(),
-  gstin: Text(15).optional(),
+  gstin: Text(30).optional(),
   stateCode: z.union([z.string().regex(/^\d{2}$/, "Two-digit state code."), z.literal("")]).optional(),
   notes: Text(500).optional(),
   /** Udhaar due after this many days; null = the shop's setting. */
@@ -142,7 +158,28 @@ export const SettingsDto = z.object({
   logoDataUrl: z.string().nullable(),
   upiId: z.string(),
   printUpiQrOnReceipt: z.boolean(),
+  taxMode: z.enum(["INDIA_GST", "CUSTOM"]),
+  taxLabel: z.string(),
+  taxNumberLabel: z.string(),
+  itemCodeLabel: z.string(),
+  invoiceTitle: z.string(),
 });
+
+export const TaxGroupBody = z.object({
+  name: Name,
+  taxes: TaxPartsSchema,
+  isDefault: z.boolean().optional(),
+});
+export const TaxGroupDto = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  taxes: z.array(z.object({ name: z.string(), rateBp: z.number().int() })),
+  isDefault: z.boolean(),
+  /** Their sum: what the product pays in all. */
+  rateBp: z.number().int(),
+  products: z.number().int(),
+});
+
 export const PaymentMethodDto = z.object({ id: z.uuid(), name: z.string(), kind: Kind, active: z.boolean(), sort: z.number().int() });
 export const CounterDto = z.object({ id: z.uuid(), branchId: z.uuid(), code: z.string(), name: z.string(), lastSeenAt: Iso.nullable() });
 export const CategoryDto = z.object({ id: z.uuid(), name: z.string() });
@@ -154,6 +191,7 @@ export const ProductDto = z.object({
   barcode: z.string(),
   hsn: z.string(),
   gstRateBp: z.number().int(),
+  taxGroupId: z.uuid().nullable(),
   taxInclusive: z.boolean(),
   unit: z.string(),
   defaultPrice: z.number().int(),
@@ -205,6 +243,9 @@ export const OrderDto = z.object({
   placeOfSupply: z.string().nullable(),
   interState: z.boolean(),
   taxEnabled: z.boolean(),
+  taxMode: z.enum(["INDIA_GST", "CUSTOM"]),
+  /** CUSTOM mode: tax by name and rate. */
+  taxTotals: z.array(TaxAmountDto),
   discount: DiscountBody,
   subtotal: z.number().int(),
   discountTotal: z.number().int(),
@@ -233,6 +274,7 @@ export const OrderDto = z.object({
       gross: z.number().int(),
       discount: z.number().int(),
       ...Amounts,
+      taxes: z.array(TaxAmountDto),
       returnedQtyMilli: z.number().int(),
       batches: z.array(z.object({ batchNo: z.string(), expiry: z.string().nullable(), qtyMilli: z.number().int() })),
     }),
@@ -248,6 +290,7 @@ export const OrderDto = z.object({
       cgstTotal: z.number().int(),
       sgstTotal: z.number().int(),
       igstTotal: z.number().int(),
+      taxTotals: z.array(TaxAmountDto),
       total: z.number().int(),
       createdAt: Iso,
       items: z.array(z.object({ orderItemId: z.uuid(), qtyMilli: z.number().int(), total: z.number().int() })),
