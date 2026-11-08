@@ -138,7 +138,7 @@ export function purchasesRouter(ctx: Ctx): Router {
     });
     const live = rows.filter((r) => !r.cancelledAt);
     res.json({
-      totals: { bills: live.length, total: live.reduce((s, r) => s + r.total, 0), inputGst: live.reduce((s, r) => s + r.cgstTotal + r.sgstTotal + r.igstTotal, 0) },
+      totals: { bills: live.length, total: live.reduce((s, r) => s + r.total, 0), inputGst: live.reduce((s, r) => s + r.total - r.taxableTotal, 0) },
       purchases: rows.map((r) => ({ ...purchaseSummary(r), itemCount: r._count.items })),
     });
   });
