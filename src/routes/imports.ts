@@ -10,12 +10,13 @@ import { auth, authenticate, requireActivePlan, requireRole, type AuthContext } 
 import type { Db } from "../db/types.js";
 import type { Branch, Product } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
-import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
+import { normalizePhone } from "../lib/normalize.js";
 import { audit } from "../services/audit.js";
 import { addToOpeningBatch, fromDay, reconcileBatches } from "../services/batches.js";
 import { branchFor, planLimit } from "./access.js";
 import { moveStock } from "./catalogue.js";
 import { importFreePosBooks } from "../services/freePosBooks.js";
+import { groupForRate, ItemCode, itemCodeError, parseTaxNumber, stateFromTaxNumber } from "../lib/taxes.js";
 
 const MAX_ROWS = 5000;
 const Paise = z.number().int().min(0).max(1_000_000_000);
@@ -25,7 +26,7 @@ export const ProductRow = z.object({
   category: z.string().trim().max(120).optional(),
   sku: z.string().trim().max(60).optional(),
   barcode: z.string().trim().max(60).optional(),
-  hsn: z.string().trim().regex(/^(\d{4}|\d{6}|\d{8})?$/, "HSN is 4, 6 or 8 digits.").optional(),
+  hsn: ItemCode.optional(),
   gstRateBp: z.number().int().min(0).max(10_000).optional(),
   taxInclusive: z.boolean().optional(),
   unit: z.string().trim().max(20).optional(),
@@ -40,7 +41,7 @@ export const CustomerRow = z.object({
   name: z.string().trim().min(1).max(120),
   phone: z.string().trim().max(20).optional(),
   email: z.string().trim().max(200).optional(),
-  gstin: z.string().trim().max(15).optional(),
+  gstin: z.string().trim().max(30).optional(),
   stateCode: z.string().trim().max(2).optional(),
   address: z.string().trim().max(300).optional(),
   notes: z.string().trim().max(500).optional(),
@@ -78,8 +79,15 @@ async function upsertProducts(ctx: Ctx, a: AuthContext, branch: Branch, rows: z.
       await tx.account.update({ where: { id: a.account.id }, data: { updatedAt: ctx.now() } });
       const cat = await loadCatalogue(tx, a.account.id);
       let count = cat.products.length;
+      const custom = a.account.taxMode === "CUSTOM";
+      const groupCache = new Map<number, string>();
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]!;
+        const codeErr = itemCodeError(a.account.taxMode, row.hsn, a.account.itemCodeLabel || "HSN");
+        if (codeErr) {
+          result.errors.push({ row: indexes[i]!, message: codeErr });
+          continue;
+        }
         let categoryId: string | null | undefined;
         if (row.category) {
           categoryId = cat.categories.get(row.category.toLowerCase());
@@ -95,6 +103,8 @@ async function upsertProducts(ctx: Ctx, a: AuthContext, branch: Branch, rows: z.
           barcode: row.barcode,
           hsn: row.hsn,
           gstRateBp: row.gstRateBp,
+          // Custom taxes: a "Tax %" column picks (or makes) a one-tax group at that rate.
+          ...(custom && row.gstRateBp !== undefined ? { taxGroupId: await groupForRate(tx, a.account, row.gstRateBp, groupCache) } : {}),
           taxInclusive: row.taxInclusive,
           unit: row.unit,
           price: row.price,
@@ -163,12 +173,12 @@ async function upsertCustomers(ctx: Ctx, a: AuthContext, raw: z.infer<typeof Cus
           result.errors.push({ row: indexes[i]!, message: "phone: not a valid number" });
           continue;
         }
-        const gstin = row.gstin ? normalizeTaxNumber(row.gstin) : null;
-        if (row.gstin && (!gstin || !GSTIN_PATTERN.test(gstin))) {
-          result.errors.push({ row: indexes[i]!, message: "gstin: not a valid GSTIN" });
+        const gstin = row.gstin ? parseTaxNumber(a.account, row.gstin) : null;
+        if (row.gstin && !gstin) {
+          result.errors.push({ row: indexes[i]!, message: `gstin: not a valid ${a.account.taxMode === "CUSTOM" ? a.account.taxNumberLabel || "tax number" : "GSTIN"}` });
           continue;
         }
-        const data = { name: row.name, phone: phone ?? "", email: row.email ?? "", gstin, stateCode: row.stateCode || gstin?.slice(0, 2) || null, address: row.address ?? "", notes: row.notes ?? "" };
+        const data = { name: row.name, phone: phone ?? "", email: row.email ?? "", gstin, stateCode: row.stateCode || stateFromTaxNumber(a.account, gstin) || null, address: row.address ?? "", notes: row.notes ?? "" };
         const match = (phone ? existing.find((c) => c.phone === phone) : undefined) ?? existing.find((c) => c.name.toLowerCase() === row.name.toLowerCase() && (!c.phone || !phone));
         if (match) {
           Object.assign(match, await tx.customer.update({ where: { id: match.id }, data }));

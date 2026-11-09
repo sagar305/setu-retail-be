@@ -81,7 +81,7 @@ export function reportsRouter(ctx: Ctx): Router {
     const a = auth(req);
     const branchIds = scope(a, req);
     const { from, to } = range(ctx, a, req);
-    const done: Prisma.OrderWhereInput = { accountId: a.account.id, branchId: { in: branchIds }, status: "COMPLETED", taxEnabled: true, createdAt: { gte: from, lt: to } };
+    const done: Prisma.OrderWhereInput = { accountId: a.account.id, branchId: { in: branchIds }, status: "COMPLETED", taxEnabled: true, taxMode: "INDIA_GST", createdAt: { gte: from, lt: to } };
     const amounts = { taxable: true, cgst: true, sgst: true, igst: true, total: true } as const;
     const [byRate, byHsn, b2b, b2c, cnByRate, creditNotes] = await Promise.all([
       ctx.prisma.orderItem.groupBy({ by: ["gstRateBp"], where: { order: done }, _sum: amounts, orderBy: { gstRateBp: "asc" } }),
@@ -99,11 +99,11 @@ export function reportsRouter(ctx: Ctx): Router {
         JOIN "credit_notes" cn ON cn."id" = ci."creditNoteId"
         JOIN "order_items" oi ON oi."id" = ci."orderItemId"
         JOIN "orders" o ON o."id" = cn."orderId"
-        WHERE cn."accountId" = ${a.account.id}::uuid AND cn."branchId" = ANY(${branchIds}::uuid[]) AND o."taxEnabled" = true
+        WHERE cn."accountId" = ${a.account.id}::uuid AND cn."branchId" = ANY(${branchIds}::uuid[]) AND o."taxEnabled" = true AND o."taxMode" = 'INDIA_GST'
           AND cn."createdAt" >= ${from} AND cn."createdAt" < ${to}
         GROUP BY 1 ORDER BY 1`,
       ctx.prisma.creditNote.findMany({
-        where: { accountId: a.account.id, branchId: { in: branchIds }, createdAt: { gte: from, lt: to }, order: { taxEnabled: true } },
+        where: { accountId: a.account.id, branchId: { in: branchIds }, createdAt: { gte: from, lt: to }, order: { taxEnabled: true, taxMode: "INDIA_GST" } },
         orderBy: { createdAt: "asc" },
         take: 5000,
         select: { number: true, createdAt: true, taxableTotal: true, cgstTotal: true, sgstTotal: true, igstTotal: true, total: true, order: { select: { invoiceNumber: true, customerGstin: true, customerName: true } } },
@@ -164,6 +164,77 @@ export function reportsRouter(ctx: Ctx): Router {
         igst: c.igstTotal,
         total: c.total,
       })),
+    });
+  });
+
+  // Custom taxes (any country): tax collected on sales and paid on supplier
+  // bills, by tax name and rate, net of returns.
+  router.get("/reports/taxes", async (req, res) => {
+    const a = auth(req);
+    const branchIds = scope(a, req);
+    const { from, to } = range(ctx, a, req);
+    const acc = a.account.id;
+    type Row = { name: string; rate: number; amount: bigint };
+    const [sales, returns, bought, sentBack, totals, cnTotals, invoices] = await Promise.all([
+      ctx.prisma.$queryRaw<Row[]>`
+        SELECT t->>'name' AS name, (t->>'rateBp')::int AS rate, sum((t->>'amount')::bigint) AS amount
+        FROM "order_items" oi JOIN "orders" o ON o."id" = oi."orderId", jsonb_array_elements(oi."taxes") t
+        WHERE o."accountId" = ${acc}::uuid AND o."branchId" = ANY(${branchIds}::uuid[]) AND o."status" = 'COMPLETED' AND o."taxMode" = 'CUSTOM'
+          AND o."createdAt" >= ${from} AND o."createdAt" < ${to}
+        GROUP BY 1, 2`,
+      ctx.prisma.$queryRaw<Row[]>`
+        SELECT t->>'name' AS name, (t->>'rateBp')::int AS rate, sum((t->>'amount')::bigint) AS amount
+        FROM "credit_note_items" ci JOIN "credit_notes" cn ON cn."id" = ci."creditNoteId" JOIN "orders" o ON o."id" = cn."orderId", jsonb_array_elements(ci."taxes") t
+        WHERE cn."accountId" = ${acc}::uuid AND cn."branchId" = ANY(${branchIds}::uuid[]) AND o."taxMode" = 'CUSTOM'
+          AND cn."createdAt" >= ${from} AND cn."createdAt" < ${to}
+        GROUP BY 1, 2`,
+      ctx.prisma.$queryRaw<Row[]>`
+        SELECT t->>'name' AS name, (t->>'rateBp')::int AS rate, sum((t->>'amount')::bigint) AS amount
+        FROM "purchase_items" pi JOIN "purchases" p ON p."id" = pi."purchaseId", jsonb_array_elements(pi."taxes") t
+        WHERE p."accountId" = ${acc}::uuid AND p."branchId" = ANY(${branchIds}::uuid[]) AND p."cancelledAt" IS NULL AND p."taxMode" = 'CUSTOM'
+          AND p."billDate" >= ${from} AND p."billDate" < ${to}
+        GROUP BY 1, 2`,
+      ctx.prisma.$queryRaw<Row[]>`
+        SELECT t->>'name' AS name, (t->>'rateBp')::int AS rate, sum((t->>'amount')::bigint) AS amount
+        FROM "purchase_return_items" ri JOIN "purchase_returns" r ON r."id" = ri."returnId" JOIN "purchases" p ON p."id" = r."purchaseId", jsonb_array_elements(ri."taxes") t
+        WHERE r."accountId" = ${acc}::uuid AND r."branchId" = ANY(${branchIds}::uuid[]) AND r."mode" = 'CREDIT_NOTE' AND p."taxMode" = 'CUSTOM'
+          AND r."occurredAt" >= ${from} AND r."occurredAt" < ${to}
+        GROUP BY 1, 2`,
+      ctx.prisma.order.aggregate({ where: { accountId: acc, branchId: { in: branchIds }, status: "COMPLETED", taxMode: "CUSTOM", createdAt: { gte: from, lt: to } }, _sum: { taxableTotal: true, total: true }, _count: true }),
+      ctx.prisma.creditNote.aggregate({ where: { accountId: acc, branchId: { in: branchIds }, createdAt: { gte: from, lt: to }, order: { taxMode: "CUSTOM" } }, _sum: { taxableTotal: true, total: true } }),
+      // Bills to customers with a tax number (business customers).
+      ctx.prisma.order.findMany({
+        where: { accountId: acc, branchId: { in: branchIds }, status: "COMPLETED", taxMode: "CUSTOM", customerGstin: { not: null }, createdAt: { gte: from, lt: to } },
+        orderBy: { createdAt: "asc" },
+        take: 5000,
+        select: { invoiceNumber: true, createdAt: true, customerName: true, customerGstin: true, taxableTotal: true, total: true },
+      }),
+    ]);
+    const key = (r: { name: string; rate: number }) => `${r.rate}|${r.name}`;
+    const rows = new Map<string, { name: string; rateBp: number; sales: number; returns: number; purchases: number; purchaseReturns: number }>();
+    const add = (list: Row[], k: "sales" | "returns" | "purchases" | "purchaseReturns") => {
+      for (const r of list) {
+        const id = key(r);
+        const row = rows.get(id) ?? { name: r.name, rateBp: Number(r.rate), sales: 0, returns: 0, purchases: 0, purchaseReturns: 0 };
+        row[k] += Number(r.amount);
+        rows.set(id, row);
+      }
+    };
+    add(sales, "sales");
+    add(returns, "returns");
+    add(bought, "purchases");
+    add(sentBack, "purchaseReturns");
+    const byTax = [...rows.values()]
+      .sort((x, y) => x.name.localeCompare(y.name) || x.rateBp - y.rateBp)
+      .map((r) => ({ ...r, collected: r.sales - r.returns, paid: r.purchases - r.purchaseReturns, net: r.sales - r.returns - (r.purchases - r.purchaseReturns) }));
+    res.json({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      bills: totals._count,
+      taxableSales: n(totals._sum.taxableTotal) - n(cnTotals._sum.taxableTotal),
+      totalSales: n(totals._sum.total) - n(cnTotals._sum.total),
+      byTax,
+      invoices: invoices.map((o) => ({ invoiceNumber: o.invoiceNumber, date: o.createdAt.toISOString(), customerName: o.customerName, customerTaxNumber: o.customerGstin, taxable: o.taxableTotal, tax: o.total - o.taxableTotal, total: o.total })),
     });
   });
 

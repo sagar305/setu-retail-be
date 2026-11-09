@@ -1,10 +1,11 @@
 import { Router } from "express";
 import type { Ctx } from "../context.js";
 import { auth, authenticate, requireActivePlan, requireRole } from "../auth/middleware.js";
-import type { Customer, Prisma } from "../generated/prisma/client.js";
+import type { Account, Customer, Prisma } from "../generated/prisma/client.js";
 import { mergeFields, offlineMeta, recordClashes, recordDuplicateCustomer, recordRemovedEdit } from "../services/conflicts.js";
 import { AppError } from "../http/errors.js";
-import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
+import { normalizePhone } from "../lib/normalize.js";
+import { parseTaxNumber, stateFromTaxNumber, taxNumberMessage } from "../lib/taxes.js";
 import { CustomerBody, CustomerPatchBody } from "../schemas2.js";
 import { planLimit } from "./access.js";
 import { audit } from "../services/audit.js";
@@ -23,7 +24,7 @@ export const customerDto = (c: Customer) => ({
   createdAt: c.createdAt.toISOString(),
 });
 
-function clean(body: { phone?: string; gstin?: string; stateCode?: string }) {
+function clean(account: Account, body: { phone?: string; gstin?: string; stateCode?: string }) {
   const out: { phone?: string; gstin?: string | null; stateCode?: string | null } = {};
   if (body.phone !== undefined) {
     if (body.phone === "") out.phone = "";
@@ -36,14 +37,14 @@ function clean(body: { phone?: string; gstin?: string; stateCode?: string }) {
   if (body.gstin !== undefined) {
     if (body.gstin === "") out.gstin = null;
     else {
-      const g = normalizeTaxNumber(body.gstin);
-      if (!g || !GSTIN_PATTERN.test(g)) throw new AppError(400, "invalid_gstin", "Enter a valid 15-character GSTIN.");
+      const g = parseTaxNumber(account, body.gstin);
+      if (!g) throw new AppError(400, "invalid_gstin", taxNumberMessage(account));
       out.gstin = g;
     }
   }
   if (body.stateCode !== undefined) out.stateCode = body.stateCode || null;
   // A GSTIN starts with the state code; use it when none was given.
-  if (out.gstin && !out.stateCode && body.stateCode === undefined) out.stateCode = out.gstin.slice(0, 2);
+  if (out.gstin && !out.stateCode && body.stateCode === undefined) out.stateCode = stateFromTaxNumber(account, out.gstin);
   return out;
 }
 
@@ -81,7 +82,7 @@ export function customersRouter(ctx: Ctx): Router {
       if (max !== null && (await tx.customer.count({ where: { accountId: a.account.id, archivedAt: null } })) >= max) {
         throw new AppError(403, "plan_limit", `Your plan allows ${max.toLocaleString("en-IN")} customers.`, { limit: "customers", max });
       }
-      return tx.customer.create({ data: { ...body, ...clean(body), accountId: a.account.id } });
+      return tx.customer.create({ data: { ...body, ...clean(a.account, body), accountId: a.account.id } });
     });
     // Same phone as another customer (often both added on different counters offline): ask the owner.
     if (c.phone) {
@@ -102,7 +103,7 @@ export function customersRouter(ctx: Ctx): Router {
       await recordRemovedEdit(ctx.prisma, a, subject, body, changedAt, ctx.now());
       return void res.json({ customer: customerDto(found), conflicts: 1 });
     }
-    const { apply, clashes } = mergeFields(found, { ...body, ...clean(body) }, base);
+    const { apply, clashes } = mergeFields(found, { ...body, ...clean(a.account, body) }, base);
     const conflicts = await recordClashes(ctx.prisma, a, subject, clashes, changedAt, ctx.now());
     const data = apply;
     const c = Object.keys(data).length ? await ctx.prisma.customer.update({ where: { id: found.id }, data }) : found;

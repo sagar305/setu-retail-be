@@ -2,6 +2,7 @@
 import "./zodOpenApi.js";
 import { z } from "zod";
 import { TOOL_SLUGS } from "./services/books.js";
+import { ItemCode, TaxPartSchema } from "./lib/taxes.js";
 
 const Name = z.string().trim().min(1, "Required.").max(120);
 const Amount = z.number().int().min(1, "Enter an amount.").max(1_000_000_000);
@@ -18,7 +19,7 @@ export const SupplierBody = z.object({
   name: Name,
   phone: Text(20).optional(),
   email: Text(200).optional(),
-  gstin: Text(15).optional(),
+  gstin: Text(30).optional(),
   stateCode: Text(2).optional(),
   address: Text(300).optional(),
   notes: Text(500).optional(),
@@ -70,11 +71,13 @@ export const PurchaseLineBody = z.object({
   /** A product in the catalogue (stock goes up), or leave out for a free-text line. */
   productId: z.uuid().nullable().optional(),
   name: Text(200).optional(),
-  hsn: z.string().trim().regex(/^(\d{4}|\d{6}|\d{8})?$/, "HSN is 4, 6 or 8 digits.").optional(),
+  hsn: ItemCode.optional(),
   qtyMilli: z.number().int().min(1).max(1_000_000_000),
   /** Cost per unit before GST, as on the supplier's bill. */
   unitCost: Paise,
   gstRateBp: z.number().int().min(0).max(10_000),
+  /** Custom tax mode: the line's taxes (default: the product's tax group). */
+  taxes: z.array(TaxPartSchema).max(5).optional(),
   batchNo: Text(60).optional(),
   expiry: Day.nullable().optional(),
 });
@@ -166,7 +169,9 @@ export const CashBookDto = z.object({
     }),
   ),
 });
-const Tax = { taxable: Money, cgst: Money, sgst: Money, igst: Money, total: Money };
+const TaxAmt = z.object({ name: z.string(), rateBp: z.number().int(), amount: z.number().int() });
+/** taxes: custom tax mode, by name and rate. */
+const Tax = { taxable: Money, cgst: Money, sgst: Money, igst: Money, taxes: z.array(TaxAmt), total: Money };
 export const PurchaseItemDto = z.object({
   id: z.string(),
   productId: z.string().nullable(),
@@ -192,6 +197,7 @@ export const PurchaseReturnDto = z.object({
   cgstTotal: Money,
   sgstTotal: Money,
   igstTotal: Money,
+  taxTotals: z.array(TaxAmt),
   total: Money,
   items: z.array(z.object({ id: z.string(), purchaseItemId: z.string().nullable(), name: z.string(), qtyMilli: z.number().int(), ...Tax })),
 });
@@ -204,6 +210,7 @@ export const PurchaseDto = z.object({
   billDate: z.string(),
   dueDate: z.string().nullable(),
   interState: z.boolean(),
+  taxMode: z.enum(["INDIA_GST", "CUSTOM"]),
   taxableTotal: Money,
   cgstTotal: Money,
   sgstTotal: Money,
@@ -218,7 +225,8 @@ export const PurchaseDto = z.object({
   cancelledAt: z.string().nullable(),
   cancelReason: z.string(),
   createdAt: z.string(),
+  taxTotals: z.array(TaxAmt),
   items: z.array(PurchaseItemDto),
   returns: z.array(PurchaseReturnDto),
 });
-export const PurchaseSummaryDto = PurchaseDto.omit({ items: true, returns: true }).extend({ itemCount: z.number().int() });
+export const PurchaseSummaryDto = PurchaseDto.omit({ items: true, returns: true, taxTotals: true }).extend({ itemCount: z.number().int() });
