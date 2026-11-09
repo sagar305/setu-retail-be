@@ -249,7 +249,7 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **Backups:** a nightly encrypted `pg_dump` kept as a GitHub Actions artifact for 90 days, on top of the provider's own backups. Restore guide: `docs/BACKUP-RESTORE.md`.
 - **Load target:** 200 shops, 500 counters, about 10 bills/s at peak. One API process handled 5× that.
 - **Contact-sales keys** start when the current paid plan ends, with no choice shown. On a trial or free days they start now.
-- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite, `COOKIE_PATH_PREFIX=/api`), so sign-in cookies are first-party.
+- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite), so sign-in cookies are first-party. The sign-in cookie is for the whole site (path `/`), so it reaches the API at `/auth` or `/api/auth` alike.
 - **App build guard:** the app's production build fails without `VITE_API_URL`.
 - **Help:** an in-app Help page for owners and staff.
 

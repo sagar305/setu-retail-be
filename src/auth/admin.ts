@@ -21,9 +21,14 @@ declare module "express-serve-static-core" {
   }
 }
 
-function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
-  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path: `${ctx.env.COOKIE_PATH_PREFIX}/admin/auth`, expires };
+/** Whole-site path, like the shop sign-in cookie (see auth/session.ts). */
+function cookieOptions(ctx: Ctx, expires: Date, path = "/"): CookieOptions {
+  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path, expires };
 }
+const LEGACY_PATHS = ["/admin/auth", "/api/admin/auth"];
+const clearPaths = (ctx: Ctx, res: Response, paths: string[]) => {
+  for (const path of paths) res.clearCookie(ADMIN_REFRESH_COOKIE, { ...cookieOptions(ctx, new Date(0), path), expires: undefined });
+};
 
 const readCookie = (req: Request): string | null => {
   const v = (req.cookies as Record<string, unknown> | undefined)?.[ADMIN_REFRESH_COOKIE];
@@ -31,7 +36,7 @@ const readCookie = (req: Request): string | null => {
 };
 
 export function clearAdminCookie(ctx: Ctx, res: Response) {
-  res.clearCookie(ADMIN_REFRESH_COOKIE, { ...cookieOptions(ctx, new Date(0)), expires: undefined });
+  clearPaths(ctx, res, ["/", ...LEGACY_PATHS]);
 }
 
 export async function startAdminSession(ctx: Ctx, req: Request, res: Response, admin: SuperAdmin) {
@@ -42,6 +47,7 @@ export async function startAdminSession(ctx: Ctx, req: Request, res: Response, a
     data: { adminId: admin.id, refreshTokenHash: hashToken(refresh), expiresAt, userAgent: (req.get("user-agent") ?? "").slice(0, 300), createdAt: now, lastUsedAt: now },
   });
   res.cookie(ADMIN_REFRESH_COOKIE, refresh, cookieOptions(ctx, expiresAt));
+  clearPaths(ctx, res, LEGACY_PATHS);
   const accessToken = await signAdminToken({ sub: admin.id, purpose: "access", sid: session.id }, ctx.env.JWT_SECRET, now, ADMIN_ACCESS_SECONDS);
   return { accessToken, expiresIn: ADMIN_ACCESS_SECONDS };
 }
@@ -66,6 +72,7 @@ export async function refreshAdminSession(ctx: Ctx, req: Request, res: Response)
   const next = newToken();
   await ctx.prisma.adminSession.update({ where: { id: session.id }, data: { refreshTokenHash: hashToken(next), previousHash: hash, lastUsedAt: now } });
   res.cookie(ADMIN_REFRESH_COOKIE, next, cookieOptions(ctx, session.expiresAt));
+  clearPaths(ctx, res, LEGACY_PATHS);
   const accessToken = await signAdminToken({ sub: session.adminId, purpose: "access", sid: session.id }, ctx.env.JWT_SECRET, now, ADMIN_ACCESS_SECONDS);
   return { accessToken, expiresIn: ADMIN_ACCESS_SECONDS, admin: session.admin };
 }
