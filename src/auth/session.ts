@@ -9,37 +9,53 @@ import { reconcileWithinPlan } from "../services/withinPlan.js";
 
 /** One shift: a sign-in lasts 12 hours, however often the token is refreshed. */
 export const SESSION_HOURS = 12;
-export const REFRESH_COOKIE = "setu_rt";
+/**
+ * The sign-in cookie. Renamed from "setu_rt": browsers could keep empty
+ * leftovers of the old name at /auth and /api/auth, and a request then carried
+ * an empty value before the real one, which read as "signed out".
+ */
+export const REFRESH_COOKIE = "setu_session";
 
 /**
- * The sign-in cookie is for the whole site (path "/"), so it reaches the API
- * whatever address the app uses for it: /auth directly, or /api/auth through
- * the web app's pass-through. A narrower path silently dropped the cookie when
- * the two didn't match, and every page refresh signed the user out.
+ * For the whole site (path "/"), so it reaches the API at /auth or, through
+ * the web app's pass-through, /api/auth alike.
  */
-function cookieOptions(ctx: Ctx, expires: Date, path = "/"): CookieOptions {
-  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "lax", path, expires };
-}
-/** Paths older versions used; a leftover cookie there would shadow the new one. */
-const LEGACY_PATHS = ["/auth", "/api/auth"];
-
-function clearLegacy(ctx: Ctx, res: Response, name: string, paths: string[]) {
-  for (const path of paths) res.clearCookie(name, { ...cookieOptions(ctx, new Date(0), path), expires: undefined });
+function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
+  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires };
 }
 
 export function setRefreshCookie(ctx: Ctx, res: Response, token: string, expires: Date) {
   res.cookie(REFRESH_COOKIE, token, cookieOptions(ctx, expires));
-  clearLegacy(ctx, res, REFRESH_COOKIE, LEGACY_PATHS);
 }
 
 export function clearRefreshCookie(ctx: Ctx, res: Response) {
-  clearLegacy(ctx, res, REFRESH_COOKIE, ["/", ...LEGACY_PATHS]);
+  res.clearCookie(REFRESH_COOKIE, { ...cookieOptions(ctx, new Date(0)), expires: undefined });
 }
 
+/**
+ * A cookie's first non-empty value, read from the raw header. A browser can
+ * send the same name more than once (different paths); an empty or stale
+ * copy must never hide the real one.
+ */
+export function readCookieValue(req: Request, name: string): string | null {
+  const header = req.headers.cookie ?? "";
+  for (const part of header.split(";")) {
+    const eq = part.indexOf("=");
+    if (eq < 0 || part.slice(0, eq).trim() !== name) continue;
+    let value = part.slice(eq + 1).trim();
+    if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      /* keep as is */
+    }
+    if (value) return value;
+  }
+  return null;
+}
 
 export function readRefreshCookie(req: Request): string | null {
-  const value = (req.cookies as Record<string, unknown> | undefined)?.[REFRESH_COOKIE];
-  return typeof value === "string" && value ? value : null;
+  return readCookieValue(req, REFRESH_COOKIE);
 }
 
 /**

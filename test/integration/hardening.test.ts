@@ -83,13 +83,13 @@ describe.skipIf(!TEST_DB)("hardening (Postgres)", () => {
       const o = await signUpOwner(h);
       const login = await request(app).post("/auth/login").send({ login: o.username, password: "s3cret-pass" });
       const set = login.headers["set-cookie"] as unknown as string[];
-      const live = set.find((c) => c.startsWith("setu_rt=") && !c.startsWith("setu_rt=;"))!;
-      expect(live).toContain("Path=/;");
-      // Leftovers from the old paths are cleared, so they can't shadow the new cookie.
-      expect(set.filter((c) => c.startsWith("setu_rt=;")).map((c) => /Path=([^;]+)/.exec(c)![1])).toEqual(["/auth", "/api/auth"]);
-      // A refresh with that cookie works (the browser sends it to /api/auth/refresh too).
-      const refreshed = await request(app).post("/auth/refresh").set("Cookie", live.split(";")[0]!);
-      expect(refreshed.status).toBe(200);
+      expect(set).toHaveLength(1);
+      expect(set[0]).toMatch(/^setu_session=[^;]+; Path=\/;/);
+      const value = set[0]!.split(";")[0]!;
+      // What a browser sent in production: empty leftovers (more specific paths
+      // go first) before the real cookie. The real one must still win.
+      const refreshed = await request(app).post("/auth/refresh").set("Cookie", `setu_rt=; setu_session=; ${value}; setu_rt=old`);
+      expect(refreshed.status, JSON.stringify(refreshed.body)).toBe(200);
     }
     expect(() => loadEnv({ NODE_ENV: "test", COOKIE_PATH_PREFIX: "api/" })).toThrow(/COOKIE_PATH_PREFIX/);
   });
