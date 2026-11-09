@@ -11,23 +11,31 @@ import { reconcileWithinPlan } from "../services/withinPlan.js";
 export const SESSION_HOURS = 12;
 export const REFRESH_COOKIE = "setu_rt";
 
-function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
-  return {
-    httpOnly: true,
-    secure: ctx.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: `${ctx.env.COOKIE_PATH_PREFIX}/auth`,
-    expires,
-  };
+/**
+ * The sign-in cookie is for the whole site (path "/"), so it reaches the API
+ * whatever address the app uses for it: /auth directly, or /api/auth through
+ * the web app's pass-through. A narrower path silently dropped the cookie when
+ * the two didn't match, and every page refresh signed the user out.
+ */
+function cookieOptions(ctx: Ctx, expires: Date, path = "/"): CookieOptions {
+  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "lax", path, expires };
+}
+/** Paths older versions used; a leftover cookie there would shadow the new one. */
+const LEGACY_PATHS = ["/auth", "/api/auth"];
+
+function clearLegacy(ctx: Ctx, res: Response, name: string, paths: string[]) {
+  for (const path of paths) res.clearCookie(name, { ...cookieOptions(ctx, new Date(0), path), expires: undefined });
 }
 
 export function setRefreshCookie(ctx: Ctx, res: Response, token: string, expires: Date) {
   res.cookie(REFRESH_COOKIE, token, cookieOptions(ctx, expires));
+  clearLegacy(ctx, res, REFRESH_COOKIE, LEGACY_PATHS);
 }
 
 export function clearRefreshCookie(ctx: Ctx, res: Response) {
-  res.clearCookie(REFRESH_COOKIE, { ...cookieOptions(ctx, new Date(0)), expires: undefined });
+  clearLegacy(ctx, res, REFRESH_COOKIE, ["/", ...LEGACY_PATHS]);
 }
+
 
 export function readRefreshCookie(req: Request): string | null {
   const value = (req.cookies as Record<string, unknown> | undefined)?.[REFRESH_COOKIE];

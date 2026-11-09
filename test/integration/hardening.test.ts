@@ -73,14 +73,24 @@ describe.skipIf(!TEST_DB)("hardening (Postgres)", () => {
     expect(r.body.plan.current.code).toMatch(/^custom-/);
   });
 
-  it("puts the sign-in cookies under COOKIE_PATH_PREFIX", async () => {
-    const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN, RATE_LIMITS: "off", COOKIE_PATH_PREFIX: "/api" });
-    const mailer = new MemoryMailer();
-    const app = createApp({ env, prisma: db(), mailer, now: () => new Date("2026-11-04T10:00:00Z") });
-    const h = { ...harness(), app, mailer } as H;
-    const o = await signUpOwner(h);
-    const login = await request(app).post("/auth/login").send({ login: o.username, password: "s3cret-pass" });
-    expect((login.headers["set-cookie"] as unknown as string[])[0]).toContain("Path=/api/auth");
+  it("the sign-in cookie is for the whole site, so a page refresh keeps you signed in at /auth or /api/auth", async () => {
+    // COOKIE_PATH_PREFIX no longer matters: set or not, the cookie path is "/".
+    for (const prefix of ["", "/api"]) {
+      const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN, RATE_LIMITS: "off", COOKIE_PATH_PREFIX: prefix });
+      const mailer = new MemoryMailer();
+      const app = createApp({ env, prisma: db(), mailer, now: () => new Date("2026-11-04T10:00:00Z") });
+      const h = { ...harness(), app, mailer } as H;
+      const o = await signUpOwner(h);
+      const login = await request(app).post("/auth/login").send({ login: o.username, password: "s3cret-pass" });
+      const set = login.headers["set-cookie"] as unknown as string[];
+      const live = set.find((c) => c.startsWith("setu_rt=") && !c.startsWith("setu_rt=;"))!;
+      expect(live).toContain("Path=/;");
+      // Leftovers from the old paths are cleared, so they can't shadow the new cookie.
+      expect(set.filter((c) => c.startsWith("setu_rt=;")).map((c) => /Path=([^;]+)/.exec(c)![1])).toEqual(["/auth", "/api/auth"]);
+      // A refresh with that cookie works (the browser sends it to /api/auth/refresh too).
+      const refreshed = await request(app).post("/auth/refresh").set("Cookie", live.split(";")[0]!);
+      expect(refreshed.status).toBe(200);
+    }
     expect(() => loadEnv({ NODE_ENV: "test", COOKIE_PATH_PREFIX: "api/" })).toThrow(/COOKIE_PATH_PREFIX/);
   });
 });

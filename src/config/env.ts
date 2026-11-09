@@ -34,6 +34,7 @@ const schema = z
      * (e.g. Vercel rewrite /api/* → the API), the browser sees the cookies
      * under that path: set "/api". Empty when the API has its own domain.
      */
+    /** No longer used: sign-in cookies are for the whole site. Still accepted so old settings don't break. */
     COOKIE_PATH_PREFIX: z.string().regex(/^(\/[a-z0-9-]+)?$/, "Use a path like /api, or leave empty.").default(""),
   })
   .superRefine((env, ctx) => {
