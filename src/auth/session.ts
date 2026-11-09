@@ -54,6 +54,29 @@ export function readCookieValue(req: Request, name: string): string | null {
   return null;
 }
 
+/** Names of the cookies the request carried (never their values). */
+export function cookieNames(req: Request): string[] {
+  return (req.headers.cookie ?? "")
+    .split(";")
+    .map((p) => p.split("=")[0]!.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Read-only: what the API sees of this browser's sign-in, without signing in
+ * or rotating anything. Open /api/auth/session-check in the app's tab to see it.
+ */
+export async function sessionCheck(ctx: Ctx, req: Request) {
+  const token = readRefreshCookie(req);
+  const base = { cookiesReceived: cookieNames(req), sessionCookie: Boolean(token), serverTime: ctx.now().toISOString() };
+  if (!token) return { ...base, session: req.headers.cookie ? "no_session_cookie" : "no_cookies_at_all" };
+  const hash = hashToken(token);
+  const s = await ctx.prisma.session.findUnique({ where: { refreshTokenHash: hash } });
+  if (s) return { ...base, session: s.revokedAt ? "revoked" : s.expiresAt <= ctx.now() ? "expired" : "ok", expiresAt: s.expiresAt.toISOString(), lastUsedAt: s.lastUsedAt?.toISOString() ?? null };
+  const old = await ctx.prisma.session.findUnique({ where: { previousHash: hash } });
+  return { ...base, session: old ? "token_already_used" : "unknown_token" };
+}
+
 export function readRefreshCookie(req: Request): string | null {
   return readCookieValue(req, REFRESH_COOKIE);
 }
@@ -114,7 +137,13 @@ export async function startSession(ctx: Ctx, req: Request, res: Response, user: 
 /** Rotate the refresh token. A replayed old token revokes the whole session. */
 export async function refreshSession(ctx: Ctx, req: Request, res: Response) {
   const token = readRefreshCookie(req);
-  if (!token) throw new AppError(401, "not_signed_in", "Please sign in.");
+  // Why a refresh failed (no secrets), in the 401's details and the log, so a
+  // sign-out on page refresh can be diagnosed from the browser's Network tab.
+  const fail = (code: string, message: string, reason: string, extra: Record<string, unknown> = {}) => {
+    req.log?.info({ reason, cookieNames: cookieNames(req), ...extra }, "refresh refused");
+    return new AppError(401, code, message, { reason, ...extra });
+  };
+  if (!token) throw fail("not_signed_in", "Please sign in.", req.headers.cookie ? "no_session_cookie" : "no_cookies_at_all");
   const now = ctx.now();
   const hash = hashToken(token);
 
@@ -126,11 +155,11 @@ export async function refreshSession(ctx: Ctx, req: Request, res: Response) {
       req.log?.warn({ sessionId: replayed.id }, "refresh token replayed; session revoked");
     }
     clearRefreshCookie(ctx, res);
-    throw new AppError(401, "not_signed_in", "Please sign in.");
+    throw fail("not_signed_in", "Please sign in.", replayed ? "token_already_used" : "unknown_token", replayed ? { secondsSinceRotation: Math.round((now.getTime() - (replayed.lastUsedAt?.getTime() ?? now.getTime())) / 1000) } : {});
   }
   if (session.revokedAt || session.expiresAt <= now) {
     clearRefreshCookie(ctx, res);
-    throw new AppError(401, "session_ended", "Your shift session has ended. Please sign in again.");
+    throw fail("session_ended", "Your shift session has ended. Please sign in again.", session.revokedAt ? "session_revoked" : "session_expired");
   }
 
   await assertCanHoldSession(ctx, session.user);

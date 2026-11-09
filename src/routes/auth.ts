@@ -7,6 +7,7 @@ import {
   refreshSession,
   revokeAllSessions,
   revokeSessionByCookie,
+  sessionCheck,
   startSession,
 } from "../auth/session.js";
 import { TRIAL_MONTHS, TRIAL_PLAN } from "../config/plans.js";
@@ -214,6 +215,10 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
   router.post("/auth/refresh", sameOrigin, async (req, res) => {
     const { accessToken, expiresIn, user } = await refreshSession(ctx, req, res);
     res.json(await respond(user, { accessToken, expiresIn }));
+  });
+
+  router.get("/auth/session-check", async (req, res) => {
+    res.set("Cache-Control", "no-store").json(await sessionCheck(ctx, req));
   });
 
   router.post("/auth/logout", sameOrigin, async (req: Request, res) => {
