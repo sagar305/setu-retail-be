@@ -8003,6 +8003,88 @@
         }
       }
     },
+    "/auth/session-check": {
+      "get": {
+        "summary": "Read-only: what the API sees of this browser's sign-in cookie (names only, never values); for diagnosing sign-outs",
+        "tags": [
+          "auth"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cookiesReceived": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "sessionCookie": {
+                      "type": "boolean"
+                    },
+                    "serverTime": {
+                      "type": "string"
+                    },
+                    "session": {
+                      "type": "string",
+                      "enum": [
+                        "ok",
+                        "revoked",
+                        "expired",
+                        "token_already_used",
+                        "unknown_token",
+                        "no_session_cookie",
+                        "no_cookies_at_all"
+                      ]
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    },
+                    "lastUsedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "cookiesReceived",
+                    "sessionCookie",
+                    "serverTime",
+                    "session"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/logout": {
       "post": {
         "summary": "Sign this device out",

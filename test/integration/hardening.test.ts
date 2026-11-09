@@ -93,4 +93,27 @@ describe.skipIf(!TEST_DB)("hardening (Postgres)", () => {
     }
     expect(() => loadEnv({ NODE_ENV: "test", COOKIE_PATH_PREFIX: "api/" })).toThrow(/COOKIE_PATH_PREFIX/);
   });
+
+  it("session-check and refresh 401s say why a sign-in can't continue, without revealing values", async () => {
+    const h = harness();
+    const o = await signUpOwner(h);
+    const login = await request(h.app).post("/auth/login").send({ login: o.username, password: "s3cret-pass" });
+    const cookie = (login.headers["set-cookie"] as unknown as string[])[0]!.split(";")[0]!;
+    const check = (c?: string) => (c ? request(h.app).get("/auth/session-check").set("Cookie", c) : request(h.app).get("/auth/session-check"));
+
+    expect((await check()).body).toMatchObject({ session: "no_cookies_at_all", sessionCookie: false, cookiesReceived: [] });
+    expect((await check("__vercel_toolbar=1")).body).toMatchObject({ session: "no_session_cookie", cookiesReceived: ["__vercel_toolbar"] });
+    const ok = await check(`__vercel_toolbar=1; ${cookie}`);
+    expect(ok.body).toMatchObject({ session: "ok", sessionCookie: true, cookiesReceived: ["__vercel_toolbar", "setu_session"] });
+    expect(JSON.stringify(ok.body)).not.toContain(cookie.split("=")[1]!);
+
+    // Rotate once, then present the old cookie: refused, and the reason says so.
+    expect((await request(h.app).post("/auth/refresh").set("Cookie", cookie)).status).toBe(200);
+    expect((await check(cookie)).body.session).toBe("token_already_used");
+    const again = await request(h.app).post("/auth/refresh").set("Cookie", cookie);
+    expect(again.status).toBe(401);
+    expect(again.body.error.details).toMatchObject({ reason: "token_already_used" });
+    expect((await request(h.app).post("/auth/refresh")).body.error.details).toEqual({ reason: "no_cookies_at_all" });
+    expect((await request(h.app).post("/auth/refresh").set("Cookie", "setu_session=nope")).body.error.details).toEqual({ reason: "unknown_token" });
+  });
 });

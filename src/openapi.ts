@@ -85,6 +85,10 @@ route("post", "/auth/verify-email", "Verify email; starts the 3-month Basic tria
 route("post", "/auth/resend-verification", "Send the verification link again", { ...open, body: S.EmailOnlyBody, ok: z.object({ status: z.string() }), status: 202 });
 route("post", "/auth/login", "Sign in with email or username; sets the 12-hour refresh cookie", { ...open, body: S.LoginBody, ok: Session });
 route("post", "/auth/refresh", "New access token from the refresh cookie (rotates it)", { ...open, ok: Session });
+route("get", "/auth/session-check", "Read-only: what the API sees of this browser's sign-in cookie (names only, never values); for diagnosing sign-outs", {
+  ...open,
+  ok: z.object({ cookiesReceived: z.array(z.string()), sessionCookie: z.boolean(), serverTime: z.string(), session: z.enum(["ok", "revoked", "expired", "token_already_used", "unknown_token", "no_session_cookie", "no_cookies_at_all"]), expiresAt: z.string().optional(), lastUsedAt: z.string().nullable().optional() }),
+});
 route("post", "/auth/logout", "Sign this device out", { ...open, ok: null, status: 204 });
 route("post", "/auth/forgot-password", "Email a password-reset link", { ...open, body: S.EmailOnlyBody, ok: z.object({ status: z.string() }), status: 202 });
 route("post", "/auth/reset-password", "Set a new password from the emailed link; signs out every device", { ...open, body: S.ResetPasswordBody, ok: z.object({ reset: z.literal(true) }) });
