@@ -140,10 +140,25 @@ model Account {
   creditDays           Int      @default(0)
   /// Shop logo for receipts (PNG/JPEG data URL, small).
   logoDataUrl          String?
+  /// The shop's UPI ID (handle@psp): billing shows a QR for the exact amount.
+  upiId                String   @default("")
+  /// Print a UPI QR for the amount due by UPI on receipts (needs upiId).
+  printUpiQrOnReceipt  Boolean  @default(false)
   /// Next stock transfer number (T-00001…).
   nextTransferNumber   Int      @default(1)
-  createdAt            DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt            DateTime @updatedAt @db.Timestamptz(3)
+
+  // ── Tax (owner): India GST, or the shop's own taxes for any country ──
+  taxMode        TaxMode  @default(INDIA_GST)
+  /// What the tax is called on screen and on receipts ("GST", "VAT", "Sales tax"…).
+  taxLabel       String   @default("GST")
+  /// What a tax number is called ("GSTIN", "VAT No", "TRN", "ABN"…).
+  taxNumberLabel String   @default("GSTIN")
+  /// What the item tax code is called ("HSN", "HS code"…); "" hides it.
+  itemCodeLabel  String   @default("HSN")
+  /// Receipt heading while tax is on ("TAX INVOICE", "VAT INVOICE"…).
+  invoiceTitle   String   @default("TAX INVOICE")
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime @updatedAt @db.Timestamptz(3)
 
   branches       Branch[]
   users          User[]
@@ -158,8 +173,37 @@ model Account {
   suppliers      Supplier[]
   issuedKeys     IssuedKey[]
   reminders      ExpiryReminder[]
+  taxGroups      TaxGroup[]
 
   @@map("accounts")
+}
+
+enum TaxMode {
+  /// CGST + SGST within the state, IGST across states, HSN, GSTIN, place of supply.
+  INDIA_GST
+  /// The shop's own taxes, in tax groups (e.g. "VAT 20%", "VAT 5% + City tax 2%").
+  CUSTOM
+}
+
+/// A set of taxes a product pays (CUSTOM tax mode). Every tax is a % of the
+/// price before tax (no tax on tax).
+model TaxGroup {
+  id         String    @id @default(uuid()) @db.Uuid
+  accountId  String    @db.Uuid
+  name       String
+  /// [{ name, rateBp }], 1–5 taxes.
+  taxes      Json
+  /// Products without a group use the default one.
+  isDefault  Boolean   @default(false)
+  archivedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  account  Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@index([accountId])
+  @@map("tax_groups")
 }
 
 model Branch {
@@ -537,8 +581,10 @@ model Product {
   sku           String    @default("")
   barcode       String    @default("")
   hsn           String    @default("")
-  /// GST rate in basis points: 500 = 5%, 1800 = 18%.
+  /// GST rate in basis points: 500 = 5%, 1800 = 18% (INDIA_GST mode).
   gstRateBp     Int       @default(0)
+  /// Its taxes in CUSTOM tax mode; null = the default tax group.
+  taxGroupId    String?   @db.Uuid
   /// True when the price already includes GST (MRP-style).
   taxInclusive  Boolean   @default(true)
   unit          String    @default("pcs")
@@ -555,6 +601,7 @@ model Product {
 
   account  Account         @relation(fields: [accountId], references: [id], onDelete: Cascade)
   category Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  taxGroup TaxGroup?       @relation(fields: [taxGroupId], references: [id], onDelete: SetNull)
   branches BranchProduct[]
 
   @@index([accountId, name])
@@ -720,6 +767,8 @@ model Order {
   placeOfSupply String?
   interState    Boolean     @default(false)
   taxEnabled    Boolean
+  /// The tax mode the bill was made in; its items' `taxes` hold CUSTOM taxes.
+  taxMode       TaxMode     @default(INDIA_GST)
   discountType  String      @default("flat")
   /// Paise for "flat", basis points for "percent".
   discountValue Int         @default(0)
@@ -778,6 +827,8 @@ model OrderItem {
   cgst             Int
   sgst             Int
   igst             Int
+  /// CUSTOM mode: [{ name, rateBp, amount }]; gstRateBp is then their sum.
+  taxes            Json    @default("[]")
   /// What the customer pays for this line.
   total            Int
   /// Cost per unit at sale time (paise), for margin reports.
@@ -843,6 +894,8 @@ model CreditNoteItem {
   cgst         Int
   sgst         Int
   igst         Int
+  /// CUSTOM mode: [{ name, rateBp, amount }].
+  taxes        Json   @default("[]")
   total        Int
 
   creditNote CreditNote @relation(fields: [creditNoteId], references: [id], onDelete: Cascade)
@@ -1049,6 +1102,8 @@ model Purchase {
   /// When the unpaid part is due (Payables Aging); null = on the bill date.
   dueDate        DateTime?    @db.Date
   interState     Boolean      @default(false)
+  /// The tax mode the bill was entered in; its items' `taxes` hold CUSTOM taxes.
+  taxMode        TaxMode      @default(INDIA_GST)
   taxableTotal   Int
   cgstTotal      Int
   sgstTotal      Int
@@ -1093,6 +1148,8 @@ model PurchaseItem {
   cgst             Int
   sgst             Int
   igst             Int
+  /// CUSTOM mode: [{ name, rateBp, amount }]; gstRateBp is then their sum.
+  taxes            Json      @default("[]")
   total            Int
   batchId          String?   @db.Uuid
   batchNo          String    @default("")
@@ -1156,6 +1213,8 @@ model PurchaseReturnItem {
   cgst           Int
   sgst           Int
   igst           Int
+  /// CUSTOM mode: [{ name, rateBp, amount }].
+  taxes          Json    @default("[]")
   total          Int
 
   ret PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)

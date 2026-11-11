@@ -3,15 +3,16 @@ import type { Ctx } from "../context.js";
 import { auth, authenticate, requireActivePlan, requireRole } from "../auth/middleware.js";
 import { branchDto } from "../dto.js";
 import { AppError } from "../http/errors.js";
-import { GSTIN_PATTERN, normalizeTaxNumber } from "../lib/normalize.js";
+import type { Account } from "../generated/prisma/client.js";
+import { parseTaxNumber, stateFromTaxNumber, taxNumberMessage } from "../lib/taxes.js";
 import { BranchBody, BranchPatchBody } from "../schemas.js";
 import { audit } from "../services/audit.js";
 
-function cleanGstin(gstin: string | undefined): string | null | undefined {
+function cleanGstin(account: Account, gstin: string | undefined): string | null | undefined {
   if (gstin === undefined) return undefined;
   if (gstin === "") return null;
-  const g = normalizeTaxNumber(gstin);
-  if (!g || !GSTIN_PATTERN.test(g)) throw new AppError(400, "invalid_gstin", "Enter a valid 15-character GSTIN.");
+  const g = parseTaxNumber(account, gstin);
+  if (!g) throw new AppError(400, "invalid_gstin", taxNumberMessage(account));
   return g;
 }
 
@@ -26,7 +27,7 @@ export function branchesRouter(ctx: Ctx): Router {
   router.post("/branches", requireRole("OWNER"), async (req, res) => {
     const a = auth(req);
     const body = BranchBody.parse(req.body);
-    const gstin = cleanGstin(body.gstin);
+    const gstin = cleanGstin(a.account, body.gstin);
     const max = a.plan.plan!.maxBranches;
 
     const branch = await ctx.prisma.$transaction(async (tx) => {
@@ -46,7 +47,7 @@ export function branchesRouter(ctx: Ctx): Router {
           address: body.address ?? "",
           phone: body.phone ?? "",
           gstin: gstin ?? null,
-          stateCode: body.stateCode || gstin?.slice(0, 2) || null,
+          stateCode: body.stateCode || stateFromTaxNumber(a.account, gstin) || null,
         },
       });
       await audit(tx, { accountId: a.account.id, userId: a.user.id, action: "branch.created", entityType: "branch", entityId: created.id, data: { code: created.code, name: created.name } });
@@ -61,7 +62,7 @@ export function branchesRouter(ctx: Ctx): Router {
     const branch = await ctx.prisma.branch.findFirst({ where: { id: String(req.params.id), accountId: a.account.id, archivedAt: null } });
     if (!branch) throw new AppError(404, "not_found", "Branch not found.");
     if (!branch.withinPlan) throw new AppError(403, "branch_read_only", "This branch is read-only on your current plan.");
-    const gstin = cleanGstin(body.gstin);
+    const gstin = cleanGstin(a.account, body.gstin);
     const updated = await ctx.prisma.branch.update({
       where: { id: branch.id },
       data: {

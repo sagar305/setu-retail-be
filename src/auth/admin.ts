@@ -3,6 +3,7 @@
 // 8 hours; access tokens last 10 minutes and are refreshed from the cookie.
 
 import type { CookieOptions, NextFunction, Request, RequestHandler, Response } from "express";
+import { readCookieValue } from "./session.js";
 import type { Ctx } from "../context.js";
 import type { Db } from "../db/types.js";
 import type { Prisma, SuperAdmin } from "../generated/prisma/client.js";
@@ -13,7 +14,8 @@ import { requestIp } from "../services/audit.js";
 
 export const ADMIN_SESSION_HOURS = 8;
 export const ADMIN_ACCESS_SECONDS = 10 * 60;
-export const ADMIN_REFRESH_COOKIE = "setu_admin_rt";
+/** Renamed from "setu_admin_rt" for the same reason as the shop cookie (auth/session.ts). */
+export const ADMIN_REFRESH_COOKIE = "setu_admin_session";
 
 declare module "express-serve-static-core" {
   interface Request {
@@ -21,14 +23,12 @@ declare module "express-serve-static-core" {
   }
 }
 
+/** Whole-site path, like the shop sign-in cookie (see auth/session.ts). */
 function cookieOptions(ctx: Ctx, expires: Date): CookieOptions {
-  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path: `${ctx.env.COOKIE_PATH_PREFIX}/admin/auth`, expires };
+  return { httpOnly: true, secure: ctx.env.NODE_ENV === "production", sameSite: "strict", path: "/", expires };
 }
 
-const readCookie = (req: Request): string | null => {
-  const v = (req.cookies as Record<string, unknown> | undefined)?.[ADMIN_REFRESH_COOKIE];
-  return typeof v === "string" && v ? v : null;
-};
+const readCookie = (req: Request): string | null => readCookieValue(req, ADMIN_REFRESH_COOKIE);
 
 export function clearAdminCookie(ctx: Ctx, res: Response) {
   res.clearCookie(ADMIN_REFRESH_COOKIE, { ...cookieOptions(ctx, new Date(0)), expires: undefined });

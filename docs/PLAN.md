@@ -25,6 +25,7 @@ Status: Phases 0–4 built. Phase 5 in progress.
 | Offline | Billing + payment received work offline for everyone; expenses + payment made offline for owner/manager only. All sync later |
 | Invoice numbers | Series per branch + counter, e.g. `B1-C2-00045` (no clashes offline) |
 | GST | Prices **include GST**. Premium receipts have CGST/SGST/IGST split, HSN codes and place of supply |
+| Tax (v1.10) | Two modes, chosen by the owner for the whole business: **India GST** (as above, the default) or **Custom taxes** for any country: tax groups (e.g. "VAT 5%", "VAT 5% + Tourism fee 2%") picked per product, default group for the rest, every tax a % of the price before tax (no tax on tax), used on bills, returns, supplier bills and a tax report. Owner sets the tax name, tax-number name, item-code name and receipt heading, plus currency and time zone. Bills keep the taxes they were made with |
 | Branch prices | Products shared across the business; each branch can set its **own price** (falls back to the default price) |
 | Email | Sent with **Resend directly** from setu-retail-be and Setu_main |
 | Features | Everything in the free POS + all 12 connected tools rebuilt inside retail FE on cloud data |
@@ -249,7 +250,7 @@ Mobile-first; billing screen usable on a phone and on a counter PC with barcode 
 - **Backups:** a nightly encrypted `pg_dump` kept as a GitHub Actions artifact for 90 days, on top of the provider's own backups. Restore guide: `docs/BACKUP-RESTORE.md`.
 - **Load target:** 200 shops, 500 counters, about 10 bills/s at peak. One API process handled 5× that.
 - **Contact-sales keys** start when the current paid plan ends, with no choice shown. On a trial or free days they start now.
-- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite, `COOKIE_PATH_PREFIX=/api`), so sign-in cookies are first-party.
+- **Before the custom domains**, the web app reaches the API through its own address (`/api/*` Vercel rewrite), so sign-in cookies are first-party. The sign-in cookie is for the whole site (path `/`), so it reaches the API at `/auth` or `/api/auth` alike.
 - **App build guard:** the app's production build fails without `VITE_API_URL`.
 - **Help:** an in-app Help page for owners and staff.
 
@@ -292,5 +293,7 @@ None. All answered (v1.5: Contact-sales key limits typed per key; owner picks ac
 | 6 | Setu_main: retail key, pricing, buy page, checkout, webhook, email | Setu_main |
 | 7 | Super-admin, import from free POS backup (`POS_BACKUP.json`) | BE, FE |
 | 8 | Hardening: permission tests, sync tests, load test, DB backups, docs, launch | all |
+| 9 | Local-first: device cache for every screen, offline writes with background sync, conflict review | BE, FE |
+| 10 | Worldwide tax: India GST or custom tax groups, owner-set tax labels, currency and time zone | BE, FE |
 
 Each phase = its own branch + PR (Setu_main PRs into `stage`, per its CLAUDE.md).

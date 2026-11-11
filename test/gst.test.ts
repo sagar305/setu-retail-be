@@ -87,3 +87,56 @@ describe("placeOfSupply", () => {
     expect(placeOfSupply(null, null)).toEqual({ placeOfSupply: null, interState: false });
   });
 });
+
+// Custom taxes (any country): each tax a % of the price before tax.
+describe("custom taxes", () => {
+  const VAT_CITY = [
+    { name: "VAT", rateBp: 500 },
+    { name: "City tax", rateBp: 200 },
+  ];
+  const custom = (unitPrice: number, qty: number, taxes: { name: string; rateBp: number }[], taxInclusive = true) => ({ unitPrice, qtyMilli: qty * 1000, gstRateBp: 0, taxInclusive, taxes });
+
+  it("works the tax out on the sum of the rates and splits it by rate; no CGST/SGST/IGST", () => {
+    const b = computeBill([custom(10700, 1, VAT_CITY)], { type: "flat", value: 0 }, GST);
+    expect(b).toMatchObject({ taxableTotal: 10000, cgstTotal: 0, sgstTotal: 0, igstTotal: 0, total: 10700 });
+    expect(b.lines[0]!.gstRateBp).toBe(700);
+    expect(b.taxTotals).toEqual([
+      { name: "VAT", rateBp: 500, amount: 500 },
+      { name: "City tax", rateBp: 200, amount: 200 },
+    ]);
+  });
+
+  it("adds the tax on top for exclusive prices", () => {
+    const b = computeBill([custom(10000, 3, [{ name: "VAT", rateBp: 2000 }], false)], { type: "flat", value: 0 }, GST);
+    expect(b).toMatchObject({ taxableTotal: 30000, total: 36000, taxTotals: [{ name: "VAT", rateBp: 2000, amount: 6000 }] });
+  });
+
+  it("splits an odd paisa by the largest remainder, so parts add up to the tax", () => {
+    const b = computeBill([custom(1443, 1, VAT_CITY, false)], { type: "flat", value: 0 }, GST);
+    expect(b.lines[0]!.taxes.map((t) => t.amount)).toEqual([72, 29]);
+    expect(b.total).toBe(1443 + 101);
+  });
+
+  it("adds up taxes of the same name and rate across lines; a line with no taxes pays none", () => {
+    const b = computeBill([custom(10700, 1, VAT_CITY), custom(10500, 1, [{ name: "VAT", rateBp: 500 }]), custom(5000, 1, [])], { type: "flat", value: 0 }, GST);
+    expect(b.taxTotals).toEqual([
+      { name: "VAT", rateBp: 500, amount: 1000 },
+      { name: "City tax", rateBp: 200, amount: 200 },
+    ]);
+    expect(b.lines[2]).toMatchObject({ taxable: 5000, total: 5000, taxes: [] });
+  });
+
+  it("returns in steps add up to the line's taxes exactly", () => {
+    const l = computeBill([custom(10700, 3, VAT_CITY)], { type: "flat", value: 0 }, GST).lines[0]!;
+    const first = returnAmounts(l, 0, 1000);
+    const rest = returnAmounts(l, 1000, 2000);
+    expect(first).toMatchObject({ taxable: 10000, total: 10700, cgst: 0, sgst: 0, igst: 0 });
+    expect(first.taxes.map((t) => t.amount)).toEqual([500, 200]);
+    expect(rest.taxes.map((t) => t.amount)).toEqual([1000, 400]);
+  });
+
+  it("no tax at all while tax is off", () => {
+    const b = computeBill([custom(10700, 1, VAT_CITY)], { type: "flat", value: 0 }, { taxEnabled: false, interState: false });
+    expect(b).toMatchObject({ taxableTotal: 10700, total: 10700, taxTotals: [] });
+  });
+});

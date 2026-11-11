@@ -85,6 +85,10 @@ route("post", "/auth/verify-email", "Verify email; starts the 3-month Basic tria
 route("post", "/auth/resend-verification", "Send the verification link again", { ...open, body: S.EmailOnlyBody, ok: z.object({ status: z.string() }), status: 202 });
 route("post", "/auth/login", "Sign in with email or username; sets the 12-hour refresh cookie", { ...open, body: S.LoginBody, ok: Session });
 route("post", "/auth/refresh", "New access token from the refresh cookie (rotates it)", { ...open, ok: Session });
+route("get", "/auth/session-check", "Read-only: what the API sees of this browser's sign-in cookie (names only, never values); for diagnosing sign-outs", {
+  ...open,
+  ok: z.object({ cookiesReceived: z.array(z.string()), sessionCookie: z.boolean(), serverTime: z.string(), session: z.enum(["ok", "revoked", "expired", "token_already_used", "unknown_token", "no_session_cookie", "no_cookies_at_all"]), expiresAt: z.string().optional(), lastUsedAt: z.string().nullable().optional() }),
+});
 route("post", "/auth/logout", "Sign this device out", { ...open, ok: null, status: 204 });
 route("post", "/auth/forgot-password", "Email a password-reset link", { ...open, body: S.EmailOnlyBody, ok: z.object({ status: z.string() }), status: 202 });
 route("post", "/auth/reset-password", "Set a new password from the emailed link; signs out every device", { ...open, body: S.ResetPasswordBody, ok: z.object({ reset: z.literal(true) }) });
@@ -122,6 +126,11 @@ registry.register("ProductBody", P.ProductBody);
 
 route("get", "/settings", "POS settings and business details for receipts", { tag: "settings", ok: Settings });
 route("patch", "/settings", "Change POS settings (owner)", { tag: "settings", body: P.SettingsPatchBody, ok: Settings });
+const TaxGroup = registry.register("TaxGroup", P.TaxGroupDto);
+route("get", "/tax-groups", "Tax groups (custom tax mode); products counts the ones that use each", { tag: "settings", ok: z.object({ groups: z.array(TaxGroup) }) });
+route("post", "/tax-groups", "Add a tax group (owner); the first one is the default", { tag: "settings", body: P.TaxGroupBody, ok: z.object({ group: TaxGroup }), status: 201 });
+route("patch", "/tax-groups/{id}", "Edit a tax group or make it the default (owner); bills keep their taxes", { tag: "settings", body: P.TaxGroupBody.partial(), ok: z.object({ group: TaxGroup }) });
+route("delete", "/tax-groups/{id}", "Remove a tax group (owner); its products use the default group", { tag: "settings", ok: null, status: 204 });
 route("get", "/payment-methods", "Payment methods", { tag: "settings", ok: z.object({ methods: z.array(PaymentMethod) }) });
 route("post", "/payment-methods", "Add a payment method (owner)", { tag: "settings", body: P.PaymentMethodBody, ok: z.object({ method: PaymentMethod }), status: 201 });
 route("patch", "/payment-methods/{id}", "Edit a payment method (owner)", { tag: "settings", body: P.PaymentMethodBody.partial(), ok: z.object({ method: PaymentMethod }) });
@@ -211,6 +220,16 @@ const Dashboard = registry.register("Dashboard", z.object({
 
 route("get", "/reports/dashboard", "Today, yesterday, last 7 days, low stock, expiring soon (?branchId=)", { tag: "reports", ok: Dashboard });
 route("get", "/reports/sales", `Sales summary ${Range}`, { tag: "reports", ok: SalesReport });
+const TaxReport = registry.register("TaxReport", z.object({
+  from: z.string(),
+  to: z.string(),
+  bills: z.number().int(),
+  taxableSales: z.number().int(),
+  totalSales: z.number().int(),
+  byTax: z.array(z.object({ name: z.string(), rateBp: z.number().int(), sales: z.number().int(), returns: z.number().int(), collected: z.number().int(), purchases: z.number().int(), purchaseReturns: z.number().int(), paid: z.number().int(), net: z.number().int() })),
+  invoices: z.array(z.object({ invoiceNumber: z.string(), date: z.string(), customerName: z.string(), customerTaxNumber: z.string().nullable(), taxable: z.number().int(), tax: z.number().int(), total: z.number().int() })),
+}));
+route("get", "/reports/taxes", `Custom taxes: collected on sales and paid on supplier bills, by tax and rate, net of returns ${Range}`, { tag: "reports", ok: TaxReport });
 route("get", "/reports/gst", `GST by rate (returns netted), by HSN, B2B/B2C, credit notes ${Range}`, { tag: "reports", ok: GstReport });
 route("get", "/reports/stock", "Stock value, low/out/below zero, expiring batches (?branchId=)", { tag: "reports", ok: StockReport });
 route("get", "/reports/staff", `Sales by cashier and counter; margin by product ${Range}`, { tag: "reports", ok: StaffReport });
@@ -242,6 +261,7 @@ const OfflinePack = registry.register("OfflinePack", z.object({
   suppliers: z.array(z.object({ id: z.string(), name: z.string(), phone: z.string(), balance: z.number().int() })),
   expenseCategories: z.array(z.string()),
   receiptTemplates: z.array(ReceiptTemplateDto),
+  taxGroups: z.array(TaxGroup),
 }));
 registry.register("SyncMoneyOp", SyncMoneyOp);
 route("get", "/me/pin", "Has the signed-in user set a counter PIN?", { tag: "offline", ok: z.object({ pinSet: z.boolean() }) });

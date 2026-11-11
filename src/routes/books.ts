@@ -12,7 +12,9 @@ import type { Db } from "../db/types.js";
 import { isUniqueViolation } from "../db/errors.js";
 import { mergeFields, offlineMeta, recordClashes, recordRemovedEdit } from "../services/conflicts.js";
 import { AppError } from "../http/errors.js";
-import { GSTIN_PATTERN, normalizePhone, normalizeTaxNumber } from "../lib/normalize.js";
+import { normalizePhone } from "../lib/normalize.js";
+import { parseTaxNumber, stateFromTaxNumber, taxNumberMessage } from "../lib/taxes.js";
+type TaxAcc = Parameters<typeof parseTaxNumber>[0];
 import { audit } from "../services/audit.js";
 import { addDays, cashBook, dayStart, customerBalances, customerStatement, requireTool, supplierBalances, supplierStatement } from "../services/books.js";
 import { fromDay } from "../services/batches.js";
@@ -61,7 +63,7 @@ export async function moneyMethod(db: Db, accountId: string, methodId: string): 
   return m;
 }
 
-function cleanSupplier(body: { phone?: string; gstin?: string; stateCode?: string }) {
+function cleanSupplier(account: TaxAcc, body: { phone?: string; gstin?: string; stateCode?: string }) {
   const out: { phone?: string; gstin?: string | null; stateCode?: string | null } = {};
   if (body.phone !== undefined) {
     if (body.phone === "") out.phone = "";
@@ -74,13 +76,13 @@ function cleanSupplier(body: { phone?: string; gstin?: string; stateCode?: strin
   if (body.gstin !== undefined) {
     if (body.gstin === "") out.gstin = null;
     else {
-      const g = normalizeTaxNumber(body.gstin);
-      if (!g || !GSTIN_PATTERN.test(g)) throw new AppError(400, "invalid_gstin", "Enter a valid 15-character GSTIN.");
+      const g = parseTaxNumber(account, body.gstin);
+      if (!g) throw new AppError(400, "invalid_gstin", taxNumberMessage(account));
       out.gstin = g;
     }
   }
   if (body.stateCode !== undefined) out.stateCode = body.stateCode || null;
-  if (out.gstin && !out.stateCode && !body.stateCode) out.stateCode = out.gstin.slice(0, 2);
+  if (out.gstin && !out.stateCode && !body.stateCode) out.stateCode = stateFromTaxNumber(account, out.gstin);
   return out;
 }
 
@@ -129,7 +131,7 @@ export function booksRouter(ctx: Ctx): Router {
   router.post("/suppliers", OM, SUPPLIER_TOOLS, async (req, res) => {
     const a = auth(req);
     const body = SupplierBody.parse(req.body);
-    const s = await ctx.prisma.supplier.create({ data: { accountId: a.account.id, ...body, ...cleanSupplier(body) } });
+    const s = await ctx.prisma.supplier.create({ data: { accountId: a.account.id, ...body, ...cleanSupplier(a.account, body) } });
     await audit(ctx.prisma, { accountId: a.account.id, userId: a.user.id, action: "supplier.created", entityType: "supplier", entityId: s.id });
     res.status(201).json({ supplier: supplierDto(s) });
   });
@@ -157,7 +159,7 @@ export function booksRouter(ctx: Ctx): Router {
       await recordRemovedEdit(ctx.prisma, a, subject, body, changedAt, ctx.now());
       return void res.json({ supplier: supplierDto(found), conflicts: 1 });
     }
-    const { apply: data, clashes } = mergeFields(found, { ...body, ...cleanSupplier(body) }, base);
+    const { apply: data, clashes } = mergeFields(found, { ...body, ...cleanSupplier(a.account, body) }, base);
     const conflicts = await recordClashes(ctx.prisma, a, subject, clashes, changedAt, ctx.now());
     const s = Object.keys(data).length ? await ctx.prisma.supplier.update({ where: { id: found.id }, data }) : found;
     const changed = changes(found, data);

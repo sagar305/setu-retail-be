@@ -2,7 +2,7 @@
 // Used by online billing (POST /orders) and by offline sync (POST /sync/orders),
 // so both save exactly the same way.
 import type { Db } from "../db/types.js";
-import type { Account, Branch, Customer, PaymentKind, Prisma } from "../generated/prisma/client.js";
+import type { Account, Branch, Customer, PaymentKind, Prisma, TaxMode } from "../generated/prisma/client.js";
 import { AppError } from "../http/errors.js";
 import type { Bill, Discount } from "../lib/gst.js";
 import { moveStock } from "../routes/catalogue.js";
@@ -30,6 +30,7 @@ export type PersistArgs = {
   placeOfSupply: string | null;
   interState: boolean;
   taxEnabled: boolean;
+  taxMode: TaxMode;
   discount: Discount;
   bill: Bill;
   lines: LineMeta[];
@@ -87,6 +88,7 @@ export async function persistOrder(tx: Db, a: PersistArgs): Promise<FullOrder> {
       placeOfSupply: a.placeOfSupply,
       interState: a.interState,
       taxEnabled: a.taxEnabled,
+      taxMode: a.taxMode,
       discountType: a.discount.type,
       discountValue: a.discount.value,
       subtotal: bill.subtotal,
@@ -120,6 +122,7 @@ export async function persistOrder(tx: Db, a: PersistArgs): Promise<FullOrder> {
             cgst: l.cgst,
             sgst: l.sgst,
             igst: l.igst,
+            taxes: l.taxes,
             total: l.total,
             unitCost: m.costPrice,
           };
