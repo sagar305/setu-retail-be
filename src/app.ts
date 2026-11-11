@@ -48,7 +48,9 @@ export type AppDeps = {
   /** Pings the database; omitted when no database is configured. */
   checkDb?: () => Promise<void>;
   /** Tests hand the demo snapshot in directly instead of reading the file. */
-  loadDemoDump?: () => DemoDump;
+  loadDemoDump?: () => DemoDump | Promise<DemoDump>;
+  /** Tests wait for a demo reset before the request goes on; the real app never does. */
+  demoResetBlocking?: boolean;
 };
 
 /** Logs outside a request (the demo reset), in the same JSON shape as pino-http. */
@@ -57,7 +59,7 @@ function logger(env: Env) {
   return { info: (o: object, m: string) => base.info(o, m), error: (o: object, m: string) => base.error(o, m) };
 }
 
-export function createApp({ env, prisma, mailer, now, checkDb, loadDemoDump }: AppDeps): Express {
+export function createApp({ env, prisma, mailer, now, checkDb, loadDemoDump, demoResetBlocking }: AppDeps): Express {
   const app = express();
   app.disable("x-powered-by");
   // Vercel (and most hosts) sit behind one proxy hop.
@@ -89,7 +91,7 @@ export function createApp({ env, prisma, mailer, now, checkDb, loadDemoDump }: A
   // Demo deployment only: wipe and restore the sample shop on schedule.
   const clock = now ?? (() => new Date());
   const resetter = env.DEMO_RESET_ENABLED && prisma ? new DemoResetter(env, prisma, clock, logger(env), loadDemoDump) : undefined;
-  if (resetter) app.use(demoResetMiddleware(resetter));
+  if (resetter) app.use(demoResetMiddleware(resetter, !demoResetBlocking));
   app.use(demoRouter(env, clock, resetter));
 
   const openApi = buildOpenApiDocument(VERSION);

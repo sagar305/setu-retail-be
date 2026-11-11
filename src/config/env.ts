@@ -44,8 +44,8 @@ const schema = z
       .enum(["1", "true", "0", "false"])
       .default("0")
       .transform((v) => v === "1" || v === "true"),
-    /** Hours between resets, counted from midnight UTC (2 → 00:00, 02:00, 04:00 …). */
-    DEMO_RESET_INTERVAL_HOURS: z.coerce.number().min(0.25).max(168).default(2),
+    /** Hours between resets, counted from midnight UTC (24 → daily at 00:00 UTC, 05:30 IST; 2 → 00:00, 02:00 …). */
+    DEMO_RESET_INTERVAL_HOURS: z.coerce.number().min(0.25).max(168).default(24),
     /** The snapshot written by `npm run demo:dump`, relative to the project root. */
     DEMO_RESET_DUMP_PATH: z.string().default("demo-dump/demo.json.gz"),
     /** The only database name a reset may wipe. Required when resets are on. */

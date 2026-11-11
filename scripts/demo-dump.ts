@@ -6,12 +6,14 @@
 // the next deploy of the demo picks it up. Sign-ins, rate limits and the Setu
 // team's admin logins are never captured.
 import "dotenv/config";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createWriteStream, mkdirSync, statSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { gzipSync } from "node:zlib";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { createGzip } from "node:zlib";
 import { loadEnv } from "../src/config/env.js";
 import { getPrisma } from "../src/db/client.js";
-import { dumpDatabase, parseDump } from "../src/services/demoReset.js";
+import { dumpLines, type DumpMeta } from "../src/services/demoReset.js";
 
 const env = loadEnv({ ...process.env, DEMO_RESET_ENABLED: "0" });
 const prisma = getPrisma();
@@ -21,15 +23,20 @@ try {
     console.error(`Refusing to dump "${name}": set DEMO_RESET_EXPECT_DB=${name} to confirm it's the demo database.`);
     process.exit(1);
   }
-  const text = await dumpDatabase(prisma, new Date());
-  const { meta } = parseDump(text);
   const file = resolve(process.cwd(), env.DEMO_RESET_DUMP_PATH);
   mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, gzipSync(text, { level: 9 }));
-  const counts = Object.entries(meta.tables)
-    .map(([t, rows]) => [t, (rows as unknown[]).length] as const)
-    .filter(([, n]) => n > 0);
-  console.log(`Wrote ${env.DEMO_RESET_DUMP_PATH}: ${counts.map(([t, n]) => `${t} ${n}`).join(", ")}`);
+  let meta: DumpMeta | undefined;
+  // Streamed straight into the gzip file, so a big shop never sits in memory.
+  async function* lines() {
+    for await (const line of dumpLines(prisma, new Date())) {
+      meta ??= JSON.parse(line) as DumpMeta;
+      yield line + "\n";
+    }
+  }
+  await pipeline(Readable.from(lines()), createGzip({ level: 9 }), createWriteStream(file));
+  if (!meta) throw new Error("Nothing was written.");
+  const counts = Object.entries(meta.counts).filter(([, n]) => n > 0);
+  console.log(`Wrote ${env.DEMO_RESET_DUMP_PATH} (${(statSync(file).size / 1_048_576).toFixed(1)} MB): ${counts.map(([t, n]) => `${t} ${n}`).join(", ")}`);
 } finally {
   await prisma.$disconnect();
 }

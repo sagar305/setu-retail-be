@@ -21,9 +21,10 @@ if (!env.DEMO_RESET_EXPECT_DB) {
 }
 const prisma = getPrisma();
 try {
-  const dump = readDumpFile(env.DEMO_RESET_DUMP_PATH);
+  const dump = await readDumpFile(env.DEMO_RESET_DUMP_PATH);
+  const started = Date.now();
   const result = await restoreDatabase(prisma, dump, new Date(), { expectDb: env.DEMO_RESET_EXPECT_DB, wait: true, allowUnmarked: process.argv.includes("--mark-demo") });
-  console.log(result.status === "restored" ? `Restored ${result.rows} rows from the snapshot of ${dump.meta.capturedAt}.` : result.status);
+  console.log(result.status === "restored" ? `Restored ${result.rows} rows from the snapshot of ${dump.meta.capturedAt} in ${((Date.now() - started) / 1000).toFixed(1)} s.` : result.status);
 } finally {
   await prisma.$disconnect();
 }

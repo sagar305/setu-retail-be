@@ -19,7 +19,7 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
 
   function demoApp(text: string, clock: { now: Date }, expectDb: string) {
     const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN, RATE_LIMITS: "off", DEMO_RESET_ENABLED: "1", DEMO_RESET_EXPECT_DB: expectDb, DEMO_RESET_INTERVAL_HOURS: "2" });
-    return createApp({ env, prisma: db(), mailer: new MemoryMailer(), now: () => clock.now, loadDemoDump: () => parseDump(text) });
+    return createApp({ env, prisma: db(), mailer: new MemoryMailer(), now: () => clock.now, loadDemoDump: () => parseDump(text), demoResetBlocking: true });
   }
 
   it("restores the snapshot dated to now, once per reset time, and signs everyone out", async () => {

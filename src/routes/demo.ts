@@ -1,15 +1,23 @@
+import { waitUntil } from "@vercel/functions";
 import { Router, type RequestHandler } from "express";
 import type { Env } from "../config/env.js";
 import { nextBoundary, type DemoResetter } from "../services/demoReset.js";
 
 /**
  * Runs before every request on the demo deployment so the data is reset on
- * schedule (see services/demoReset.ts). Health checks don't trigger it.
+ * schedule (see services/demoReset.ts), in the background. Health checks
+ * don't trigger it. Tests pass background=false to wait for it.
  */
-export function demoResetMiddleware(resetter: DemoResetter): RequestHandler {
+export function demoResetMiddleware(resetter: DemoResetter, background = true): RequestHandler {
   return (req, _res, next) => {
     if (req.path.startsWith("/health") || req.path === "/openapi.json") return next();
-    resetter.ensureFresh().then(() => next(), next);
+    const done = resetter.ensureFresh();
+    if (!background) return void done.then(() => next(), next);
+    // The reset runs in one transaction, so visitors keep the old data until
+    // the new data is in: nobody waits for it. waitUntil keeps the Vercel
+    // function alive until it's done (a plain promise elsewhere).
+    waitUntil(done);
+    next();
   };
 }
 
