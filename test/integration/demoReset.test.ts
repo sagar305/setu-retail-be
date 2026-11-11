@@ -63,6 +63,18 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
     expect((await db().product.findMany()).map((p) => p.name)).toEqual(["Kept"]);
   });
 
+  it("never locks a demo login, however many wrong passwords are typed", async () => {
+    const h = harness();
+    const owner = await signUpOwner(h);
+    const app = demoApp(await dumpDatabase(db(), h.clock.now), { now: h.clock.now }, await dbName());
+    for (let i = 0; i < 7; i++) {
+      const wrong = await request(app).post("/auth/login").set("origin", APP_ORIGIN).send({ login: owner.username, password: "not-the-password" });
+      expect(wrong.status).toBe(401);
+    }
+    const right = await request(app).post("/auth/login").set("origin", APP_ORIGIN).send({ login: owner.username, password: "s3cret-pass" });
+    expect(right.status).toBe(200);
+  });
+
   it("never wipes a database with another name", async () => {
     const h = harness();
     const owner = await signUpOwner(h);
