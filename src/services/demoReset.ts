@@ -8,9 +8,9 @@
 //   after a reset time (daily at 00:00 UTC by default) starts the reset in the
 //   background (routes/demo.ts). Nobody visiting means nothing to reset. A
 //   newly deployed snapshot is loaded at once.
-// - Every timestamp and date is moved forward by the time since the snapshot,
-//   so the bills from "today" in the snapshot are today's bills again, the plan
-//   never runs out and expiry dates stay ahead.
+// - Every timestamp and date is moved forward by whole days (shop's time zone)
+//   so the snapshot's last day is today again, bills keep their time of day,
+//   the plan never runs out and expiry dates stay ahead.
 // - It all runs in one transaction under an advisory lock: other requests see
 //   the old data until the new data is in, and only one instance resets.
 // - It refuses to touch a database whose name isn't DEMO_RESET_EXPECT_DB, or
@@ -306,8 +306,11 @@ export async function restoreDatabase(
 
       const names = await tables(tx);
       const cols = await columns(tx);
-      const shiftedMs = Math.max(0, now.getTime() - new Date(dump.meta.capturedAt).getTime());
+      // Whole days in the shop's time zone: the snapshot's last day becomes today
+      // and every bill keeps its time of day (a reset at 05:30 must not move
+      // the shop's 9-to-9 trading into the night).
       const shiftDays = Math.max(0, dayNumber(now, dump.meta.timezone) - dayNumber(new Date(dump.meta.capturedAt), dump.meta.timezone));
+      const shiftedMs = shiftDays * 86_400_000;
 
       if (names.length) await tx.$executeRawUnsafe(`TRUNCATE ${names.map(q).join(", ")} RESTART IDENTITY CASCADE`);
 
@@ -346,6 +349,12 @@ export async function restoreDatabase(
       for (const s of serials) {
         if (!s.seq || KEEP_TABLES.has(s.table)) continue;
         await tx.$executeRawUnsafe(`SELECT setval('${s.seq.replace(/'/g, "''")}', COALESCE((SELECT MAX(${q(s.column)}) FROM ${q(s.table)}), 0) + 1, false)`);
+      }
+
+      // A whole-day shift can put something made late on the snapshot's day
+      // later than now: a plan must still have started.
+      if (known.has("subscriptions")) {
+        await tx.$executeRawUnsafe(`UPDATE "subscriptions" SET "startsAt" = $1::timestamptz WHERE "startsAt" > $1::timestamptz AND "startsAt" - $1::timestamptz < interval '1 day'`, now.toISOString());
       }
 
       await markAsDemo(tx, now, new Date(dump.meta.capturedAt));

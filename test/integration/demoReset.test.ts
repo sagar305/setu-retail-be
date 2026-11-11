@@ -42,8 +42,8 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
 
     const products = await db().product.findMany();
     expect(products.map((p) => p.name)).toEqual(["Kept"]);
-    // Moved forward by exactly the time since the snapshot (2 days 19.5 hours).
-    expect(products[0]!.createdAt.getTime() - before).toBe(clock.now.getTime() - h.clock.now.getTime());
+    // Moved forward by whole days (4 Nov → 7 Nov in India), keeping its time of day.
+    expect(products[0]!.createdAt.getTime() - before).toBe(3 * 86_400_000);
     expect(await db().session.count()).toBe(0);
 
     // The demo login still works after a reset.
