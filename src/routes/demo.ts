@@ -16,10 +16,10 @@ export function demoResetMiddleware(resetter: DemoResetter): RequestHandler {
 /** When the demo data is next wiped, for the countdown in the web app. Off everywhere but the demo. */
 export function demoRouter(env: Env, now: () => Date, resetter?: DemoResetter): Router {
   const router = Router();
-  router.get("/demo/reset", (_req, res) => {
+  router.get("/demo/reset", async (_req, res) => {
     res.set("Cache-Control", "no-store");
     if (!env.DEMO_RESET_ENABLED || !resetter) {
-      res.json({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false });
+      res.json({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false, lastResetAt: null, loadedSnapshotAt: null, deployedSnapshotAt: null, problem: null });
       return;
     }
     const at = now();
@@ -30,6 +30,7 @@ export function demoRouter(env: Env, now: () => Date, resetter?: DemoResetter): 
       nextResetAt: next.toISOString(),
       secondsUntilReset: Math.max(0, Math.ceil((next.getTime() - at.getTime()) / 1000)),
       resetting: resetter.resetting,
+      ...(await resetter.describe()),
     });
   });
   return router;

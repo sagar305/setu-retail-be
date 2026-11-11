@@ -145,11 +145,24 @@ function dayNumber(at: Date, timeZone: string): number {
 
 export type RestoreResult = { status: "restored"; rows: number; shiftedMs: number } | { status: "busy" } | { status: "fresh" };
 
-export async function lastResetAt(db: Db): Promise<Date | null> {
+/** When the demo was last reset, and from which snapshot (null before the first reset). */
+export async function demoState(db: Db): Promise<{ lastResetAt: Date; capturedAt: Date } | null> {
   const [exists] = await db.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT to_regclass(${`'${STATE_TABLE}'`}) IS NOT NULL AS ok`);
   if (!exists?.ok) return null;
-  const [row] = await db.$queryRawUnsafe<{ at: Date }[]>(`SELECT last_reset_at AS at FROM ${q(STATE_TABLE)} WHERE id = 1`);
-  return row?.at ?? null;
+  const [row] = await db.$queryRawUnsafe<{ at: Date; captured: Date }[]>(`SELECT last_reset_at AS at, captured_at AS captured FROM ${q(STATE_TABLE)} WHERE id = 1`);
+  return row ? { lastResetAt: row.at, capturedAt: row.captured } : null;
+}
+
+export async function lastResetAt(db: Db): Promise<Date | null> {
+  return (await demoState(db))?.lastResetAt ?? null;
+}
+
+/**
+ * Nothing to do: reset in this window, from the snapshot now deployed. A newly
+ * deployed snapshot is loaded at once rather than at the next reset time.
+ */
+export function isFresh(state: { lastResetAt: Date; capturedAt: Date } | null, since: Date, dump: DemoDump): boolean {
+  return Boolean(state && state.lastResetAt >= since && state.capturedAt.getTime() === new Date(dump.meta.capturedAt).getTime());
 }
 
 /**
@@ -187,7 +200,7 @@ async function assertDemoDatabase(db: Db, name: string, allowUnmarked: boolean) 
 /**
  * Wipe the database and load the snapshot, shifted to `now`. With
  * `skipIfResetSince`, does nothing when another instance already reset after
- * that time (checked under the lock).
+ * that time from this same snapshot (checked under the lock).
  */
 export async function restoreDatabase(
   prisma: PrismaClient,
@@ -206,10 +219,7 @@ export async function restoreDatabase(
         const [lock] = await tx.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS ok`);
         if (!lock?.ok) return { status: "busy" } as const;
       }
-      if (opts.skipIfResetSince) {
-        const last = await lastResetAt(tx);
-        if (last && last >= opts.skipIfResetSince) return { status: "fresh" } as const;
-      }
+      if (opts.skipIfResetSince && isFresh(await demoState(tx), opts.skipIfResetSince, dump)) return { status: "fresh" } as const;
 
       const names = await tables(tx);
       const cols = await columns(tx);
@@ -270,6 +280,8 @@ type Log = { info: (o: object, m: string) => void; error: (o: object, m: string)
  */
 export class DemoResetter {
   private freshUntil = 0;
+  /** Why the last reset didn't happen, as a short code for /demo/reset (never the raw message). */
+  private problem: string | null = null;
   private running: Promise<void> | null = null;
   private dump: DemoDump | null = null;
 
@@ -283,6 +295,24 @@ export class DemoResetter {
 
   get resetting() {
     return this.running !== null;
+  }
+
+  /** What's loaded now, for /demo/reset (helps check a demo deploy from a browser). */
+  async describe() {
+    const state = await demoState(this.prisma).catch(() => null);
+    let deployed: string | null;
+    try {
+      this.dump ??= this.load();
+      deployed = this.dump.meta.capturedAt;
+    } catch {
+      deployed = null;
+    }
+    return {
+      lastResetAt: state?.lastResetAt.toISOString() ?? null,
+      loadedSnapshotAt: state?.capturedAt.toISOString() ?? null,
+      deployedSnapshotAt: deployed ? new Date(deployed).toISOString() : null,
+      problem: this.problem,
+    };
   }
 
   ensureFresh(): Promise<void> {
@@ -299,17 +329,25 @@ export class DemoResetter {
     const boundary = lastBoundary(now, hours);
     const next = nextBoundary(now, hours).getTime();
     try {
-      const last = await lastResetAt(this.prisma);
-      if (last && last >= boundary) {
+      this.dump ??= this.load();
+      if (isFresh(await demoState(this.prisma), boundary, this.dump)) {
         this.freshUntil = next;
         return;
       }
-      this.dump ??= this.load();
       const result = await restoreDatabase(this.prisma, this.dump, now, { expectDb: this.env.DEMO_RESET_EXPECT_DB!, skipIfResetSince: boundary });
       // Another instance is mid-reset: look again in a few seconds.
       this.freshUntil = result.status === "busy" ? now.getTime() + 5_000 : next;
+      this.problem = null;
       if (result.status === "restored") this.log.info({ rows: result.rows, shiftedMs: result.shiftedMs }, "demo data restored");
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.problem = /DEMO_RESET_EXPECT_DB/.test(message)
+        ? "wrong_database_name"
+        : /never set up as the demo/.test(message)
+          ? "database_has_real_shops"
+          : /ENOENT|snapshot/i.test(message)
+            ? "snapshot_missing"
+            : "reset_failed";
       // Never fail the visitor's request over it; try again in a minute.
       this.freshUntil = now.getTime() + 60_000;
       this.log.error({ err }, "demo reset failed");

@@ -437,6 +437,12 @@ route("get", "/demo/reset", "When the demo data is next wiped (enabled: false ev
     nextResetAt: z.iso.datetime().nullable(),
     secondsUntilReset: z.number().int().nullable(),
     resetting: z.boolean(),
+    /** Last reset, and the snapshot it loaded vs the one deployed (they match once the new one is in). */
+    lastResetAt: z.iso.datetime().nullable(),
+    loadedSnapshotAt: z.iso.datetime().nullable(),
+    deployedSnapshotAt: z.iso.datetime().nullable(),
+    /** Why the last reset didn't happen: wrong_database_name, database_has_real_shops, snapshot_missing or reset_failed. */
+    problem: z.string().nullable(),
   }),
 });
 
