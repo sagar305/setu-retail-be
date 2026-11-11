@@ -2,7 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../../src/app.js";
 import { loadEnv } from "../../src/config/env.js";
-import { dumpDatabase, parseDump, STATE_TABLE } from "../../src/services/demoReset.js";
+import { dumpDatabase, markAsDemo, parseDump, STATE_TABLE } from "../../src/services/demoReset.js";
 import { MemoryMailer } from "../../src/mail/mailer.js";
 import { APP_ORIGIN, db, harness, resetDb, signIn, signUpOwner, TEST_DB } from "./harness.js";
 
@@ -34,6 +34,7 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
 
     await o.as("post", "/products").send({ name: "Visitor's junk", price: 500 });
 
+    await markAsDemo(db(), new Date("2026-01-01T00:00:00Z"));
     const clock = { now: new Date("2026-11-07T05:30:00Z") };
     const app = demoApp(text, clock, await dbName());
     const status = await request(app).get("/demo/reset");
@@ -66,6 +67,7 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
   it("never locks a demo login, however many wrong passwords are typed", async () => {
     const h = harness();
     const owner = await signUpOwner(h);
+    await markAsDemo(db(), h.clock.now);
     const app = demoApp(await dumpDatabase(db(), h.clock.now), { now: h.clock.now }, await dbName());
     for (let i = 0; i < 7; i++) {
       const wrong = await request(app).post("/auth/login").set("origin", APP_ORIGIN).send({ login: owner.username, password: "not-the-password" });
@@ -73,6 +75,29 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
     }
     const right = await request(app).post("/auth/login").set("origin", APP_ORIGIN).send({ login: owner.username, password: "s3cret-pass" });
     expect(right.status).toBe(200);
+  });
+
+  it("never wipes a database with shops that was never marked as the demo's, even with the right name", async () => {
+    const h = harness();
+    const owner = await signUpOwner(h);
+    const text = await dumpDatabase(db(), h.clock.now);
+    const o = await signIn(h, owner.username);
+    await o.as("post", "/products").send({ name: "Real shop's product", price: 500 });
+
+    const app = demoApp(text, { now: new Date("2026-11-07T05:30:00Z") }, await dbName());
+    const res = await request(app).get("/demo/reset");
+    expect(res.status).toBe(200);
+    expect(await db().product.count()).toBe(1);
+  });
+
+  it("loads the snapshot into an empty, freshly migrated database", async () => {
+    const h = harness();
+    await signUpOwner(h);
+    const text = await dumpDatabase(db(), h.clock.now);
+    await resetDb();
+    const app = demoApp(text, { now: new Date("2026-11-07T05:30:00Z") }, await dbName());
+    await request(app).get("/demo/reset");
+    expect(await db().account.count()).toBe(1);
   });
 
   it("never wipes a database with another name", async () => {

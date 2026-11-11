@@ -12,7 +12,9 @@
 //   never runs out and expiry dates stay ahead.
 // - It all runs in one transaction under an advisory lock: other requests see
 //   the old data until the new data is in, and only one instance resets.
-// - It refuses to touch a database whose name isn't DEMO_RESET_EXPECT_DB.
+// - It refuses to touch a database whose name isn't DEMO_RESET_EXPECT_DB, or
+//   one with shops in it that was never marked as the demo's (Prisma Postgres
+//   names every database "postgres", so the name alone can't tell them apart).
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { gunzipSync } from "node:zlib";
@@ -151,6 +153,38 @@ export async function lastResetAt(db: Db): Promise<Date | null> {
 }
 
 /**
+ * Marks a database as the demo's, so resets may wipe it even though it has
+ * shops in it (the seeder and `demo:restore --mark-demo` call this).
+ */
+export async function markAsDemo(db: Db, at: Date, capturedAt: Date = at): Promise<void> {
+  await db.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS ${q(STATE_TABLE)} (id int PRIMARY KEY, last_reset_at timestamptz NOT NULL, captured_at timestamptz NOT NULL)`);
+  await db.$executeRawUnsafe(
+    `INSERT INTO ${q(STATE_TABLE)} (id, last_reset_at, captured_at) VALUES (1, $1::timestamptz, $2::timestamptz)
+     ON CONFLICT (id) DO UPDATE SET last_reset_at = EXCLUDED.last_reset_at, captured_at = EXCLUDED.captured_at`,
+    at.toISOString(),
+    capturedAt.toISOString(),
+  );
+}
+
+/**
+ * Second guard, for hosts where every database has the same name (Prisma
+ * Postgres, Supabase: "postgres"): a database with shops in it is only wiped
+ * if it was marked as the demo's. An empty, freshly migrated one is fine.
+ */
+async function assertDemoDatabase(db: Db, name: string, allowUnmarked: boolean) {
+  const [marked] = await db.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT to_regclass(${`'${STATE_TABLE}'`}) IS NOT NULL AS ok`);
+  if (marked?.ok || allowUnmarked) return;
+  const [hasAccounts] = await db.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT to_regclass('accounts') IS NOT NULL AS ok`);
+  if (!hasAccounts?.ok) return;
+  const [row] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM accounts`);
+  if ((row?.n ?? 0) > 0) {
+    throw new Error(
+      `Refusing to reset database "${name}": it has shops in it and was never set up as the demo. If it really is the demo database, run \`npm run demo:restore -- --yes --mark-demo\` once.`,
+    );
+  }
+}
+
+/**
  * Wipe the database and load the snapshot, shifted to `now`. With
  * `skipIfResetSince`, does nothing when another instance already reset after
  * that time (checked under the lock).
@@ -159,12 +193,13 @@ export async function restoreDatabase(
   prisma: PrismaClient,
   dump: DemoDump,
   now: Date,
-  opts: { expectDb: string; skipIfResetSince?: Date; wait?: boolean },
+  opts: { expectDb: string; skipIfResetSince?: Date; wait?: boolean; allowUnmarked?: boolean },
 ): Promise<RestoreResult> {
   return prisma.$transaction(
     async (tx) => {
       const name = await currentDatabase(tx);
       if (name !== opts.expectDb) throw new Error(`Refusing to reset database "${name}": DEMO_RESET_EXPECT_DB is "${opts.expectDb}".`);
+      await assertDemoDatabase(tx, name, opts.allowUnmarked ?? false);
 
       if (opts.wait) await tx.$queryRawUnsafe(`SELECT 1 AS ok FROM (SELECT pg_advisory_xact_lock(${LOCK_KEY})) l`);
       else {
@@ -217,13 +252,7 @@ export async function restoreDatabase(
         await tx.$executeRawUnsafe(`SELECT setval('${s.seq.replace(/'/g, "''")}', COALESCE((SELECT MAX(${q(s.column)}) FROM ${q(s.table)}), 0) + 1, false)`);
       }
 
-      await tx.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS ${q(STATE_TABLE)} (id int PRIMARY KEY, last_reset_at timestamptz NOT NULL, captured_at timestamptz NOT NULL)`);
-      await tx.$executeRawUnsafe(
-        `INSERT INTO ${q(STATE_TABLE)} (id, last_reset_at, captured_at) VALUES (1, $1::timestamptz, $2::timestamptz)
-         ON CONFLICT (id) DO UPDATE SET last_reset_at = EXCLUDED.last_reset_at, captured_at = EXCLUDED.captured_at`,
-        now.toISOString(),
-        dump.meta.capturedAt,
-      );
+      await markAsDemo(tx, now, new Date(dump.meta.capturedAt));
       return { status: "restored", rows, shiftedMs } as const;
     },
     { timeout: 180_000, maxWait: 15_000 },

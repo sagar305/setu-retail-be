@@ -24,6 +24,7 @@ import { loadEnv } from "../src/config/env.js";
 import { getPrisma } from "../src/db/client.js";
 import { computeBill } from "../src/lib/gst.js";
 import { MemoryMailer } from "../src/mail/mailer.js";
+import { markAsDemo } from "../src/services/demoReset.js";
 import { addMonths } from "../src/services/plans.js";
 
 const PASSWORD = process.env["DEMO_PASSWORD"] ?? "demo-shop-1234";
@@ -249,6 +250,8 @@ try {
     await call("POST", "/expenses", { id: randomUUID(), branchId: b1.id, spentAt: new Date(now - ago * 86_400_000).toISOString(), category, amount, methodId: method(category === "Transport" ? "CASH" : "UPI") });
   }
 
+  // Marked as the demo's database, so resets may wipe it although it now has a shop.
+  await markAsDemo(prisma, new Date());
   console.log(`Done. Sign in as owner, manager or cashier / ${PASSWORD}, check it over, then run: npm run demo:dump`);
   console.log(`Demo app env: VITE_DEMO_LOGIN=Owner=owner|${PASSWORD};Manager=manager|${PASSWORD};Cashier=cashier|${PASSWORD}`);
 } finally {

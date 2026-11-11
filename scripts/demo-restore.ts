@@ -3,6 +3,8 @@
 //   DATABASE_URL=<demo db> DEMO_RESET_EXPECT_DB=<its name> npm run demo:restore -- --yes
 //
 // Wipes EVERYTHING in that database and loads the snapshot, dated to now.
+// A database that has shops but was never marked as the demo's is refused;
+// add --mark-demo once if it really is the demo database.
 import "dotenv/config";
 import { loadEnv } from "../src/config/env.js";
 import { getPrisma } from "../src/db/client.js";
@@ -20,7 +22,7 @@ if (!env.DEMO_RESET_EXPECT_DB) {
 const prisma = getPrisma();
 try {
   const dump = readDumpFile(env.DEMO_RESET_DUMP_PATH);
-  const result = await restoreDatabase(prisma, dump, new Date(), { expectDb: env.DEMO_RESET_EXPECT_DB, wait: true });
+  const result = await restoreDatabase(prisma, dump, new Date(), { expectDb: env.DEMO_RESET_EXPECT_DB, wait: true, allowUnmarked: process.argv.includes("--mark-demo") });
   console.log(result.status === "restored" ? `Restored ${result.rows} rows from the snapshot of ${dump.meta.capturedAt}.` : result.status);
 } finally {
   await prisma.$disconnect();

@@ -93,9 +93,11 @@ A public demo (`demo.retail-pos.setutechnology.com`) is **a second Vercel projec
 | Variable | Default | |
 |---|---|---|
 | `DEMO_RESET_ENABLED` | off | Master switch (`1`/`true`). Nothing is wiped without it. |
-| `DEMO_RESET_EXPECT_DB` | — | Required with the switch: the only database name a reset may wipe. A mistyped `DATABASE_URL` pointing at production is refused. |
+| `DEMO_RESET_EXPECT_DB` | — | Required with the switch: the only database name a reset may wipe (`postgres` on Prisma Postgres and Supabase). |
 | `DEMO_RESET_INTERVAL_HOURS` | `2` | 0.25 to 168. |
 | `DEMO_RESET_DUMP_PATH` | `demo-dump/demo.json.gz` | Bundled into the function by `vercel.json` (`includeFiles`). |
+
+**Two guards against wiping a real database.** The name must match `DEMO_RESET_EXPECT_DB`, and a database that has shops in it must have been marked as the demo's (`_demo_state` table, created by the first reset of an empty database, by `demo:seed`, or once by hand with `npm run demo:restore -- --yes --mark-demo`). The second guard matters on hosts where every database is called `postgres`: production has shops and no mark, so it is refused even if its URL is pasted into the demo project.
 
 **Changing the demo shop.** Restore the snapshot into the demo database (or a local copy), change it in the app, then capture it again and commit:
 
