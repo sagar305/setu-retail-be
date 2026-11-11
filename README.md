@@ -44,7 +44,7 @@ Full spec: `GET /openapi.json`. Summary:
 ### How sign-in works
 - Access token (JWT, 15 min) in the `Authorization: Bearer` header; refresh token in an http-only `setu_rt` cookie scoped to `/auth`.
 - A sign-in lasts **one 12-hour shift**; refresh rotates the cookie, and replaying an old one revokes the session.
-- 5 wrong passwords lock that login for 15 minutes. Disabling a user or resetting a password signs out every device.
+- 5 wrong passwords lock that login for 15 minutes (not on the demo, where the logins are public; per-IP rate limits still apply). Disabling a user or resetting a password signs out every device.
 - Every request re-checks the session, user and plan in the database, so removing access takes effect immediately.
 
 ### Plans
@@ -88,14 +88,16 @@ Schema: `prisma/schema.prisma`; migrations: `prisma/migrations/`. The Prisma cli
 
 A public demo (`demo.retail-pos.setutechnology.com`) is **a second Vercel project on this same repo, with its own database**. Visitors sign in with a shared login; every 2 hours the database is wiped and the sample shop restored, so whatever they type disappears.
 
-**How the reset works** (`src/services/demoReset.ts`). Vercel has no long-running process, so there is no timer: reset times are counted from midnight UTC (00:00, 02:00, 04:00 … for 2 hours) and **the first request after a reset time** wipes every table and loads `demo-dump/demo.json.gz` before it is answered (about a second for the sample shop). It runs in one transaction under an advisory lock, so other requests see the old data until the new data is in and only one instance resets. Every timestamp is moved forward by the time since the snapshot (dates by whole days), so yesterday's bills in the snapshot are always yesterday's, the plan never runs out and batch expiries stay ahead. Sign-ins, rate limits, replay keys and the Setu team's admin logins are never captured, so a reset signs every visitor out. `GET /demo/reset` reports the next reset time for the countdown in the web app (`enabled: false` everywhere else).
+**How the reset works** (`src/services/demoReset.ts`). Vercel has no long-running process, so there is no timer: reset times are counted from midnight UTC (00:00, 02:00, 04:00 … for 2 hours) and **the first request after a reset time** wipes every table and loads `demo-dump/demo.json.gz` before it is answered (about a second for the sample shop). It runs in one transaction under an advisory lock, so other requests see the old data until the new data is in and only one instance resets. Every timestamp is moved forward by the time since the snapshot (dates by whole days), so yesterday's bills in the snapshot are always yesterday's, the plan never runs out and batch expiries stay ahead. Sign-ins, rate limits, replay keys and the Setu team's admin logins are never captured, so a reset signs every visitor out. Logins: `owner`, `manager` (Koramangala) and `cashier` (Indiranagar), all with the demo password; wrong passwords never lock them. `GET /demo/reset` reports the next reset time for the countdown in the web app (`enabled: false` everywhere else).
 
 | Variable | Default | |
 |---|---|---|
 | `DEMO_RESET_ENABLED` | off | Master switch (`1`/`true`). Nothing is wiped without it. |
-| `DEMO_RESET_EXPECT_DB` | — | Required with the switch: the only database name a reset may wipe. A mistyped `DATABASE_URL` pointing at production is refused. |
+| `DEMO_RESET_EXPECT_DB` | — | Required with the switch: the only database name a reset may wipe (`postgres` on Prisma Postgres and Supabase). |
 | `DEMO_RESET_INTERVAL_HOURS` | `2` | 0.25 to 168. |
 | `DEMO_RESET_DUMP_PATH` | `demo-dump/demo.json.gz` | Bundled into the function by `vercel.json` (`includeFiles`). |
+
+**Two guards against wiping a real database.** The name must match `DEMO_RESET_EXPECT_DB`, and a database that has shops in it must have been marked as the demo's (`_demo_state` table, created by the first reset of an empty database, by `demo:seed`, or once by hand with `npm run demo:restore -- --yes --mark-demo`). The second guard matters on hosts where every database is called `postgres`: production has shops and no mark, so it is refused even if its URL is pasted into the demo project.
 
 **Changing the demo shop.** Restore the snapshot into the demo database (or a local copy), change it in the app, then capture it again and commit:
 
@@ -106,4 +108,4 @@ npm run demo:restore -- --yes   # start from the current snapshot
 npm run demo:dump               # writes demo-dump/demo.json.gz
 ```
 
-To build it from nothing: an empty database, `npm run db:deploy && npm run db:seed && npm run demo:seed` (sample shop, three weeks of bills), then `npm run demo:dump`. After a migration that adds a required column with no default, run `demo:restore` + `demo:dump` again so the snapshot has it; until then a failed reset is rolled back and the demo keeps its current data.
+To build it from nothing: an empty database, `npm run db:deploy && npm run db:seed && npm run demo:seed` (sample shop with owner, manager and cashier logins, three weeks of bills), then `npm run demo:dump`. After a migration that adds a required column with no default, run `demo:restore` + `demo:dump` again so the snapshot has it; until then a failed reset is rolled back and the demo keeps its current data.

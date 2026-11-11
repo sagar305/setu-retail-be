@@ -8,8 +8,12 @@
 //   Platinum for a year, 36 products in 6 categories, 10 customers.
 // - Three weeks of bills on each branch's counter (cash, UPI, card, udhaar),
 //   plus a few expenses.
-// - The owner signs in with DEMO_LOGIN / DEMO_PASSWORD (defaults below). That
-//   pair is shown on the demo sign-in screen, so it must never be reused.
+// - Three logins, all with DEMO_PASSWORD (default below):
+//     owner    the shop owner (both branches, everything)
+//     manager  manager of Koramangala (B2)
+//     cashier  cashier at Indiranagar (B1)
+//   They are shown on the demo sign-in screen, so never reuse that password.
+//   Most bills on each branch are made by the person who works there.
 //
 // Then tidy anything by hand in the app, and capture it: `npm run demo:dump`.
 import "dotenv/config";
@@ -19,11 +23,10 @@ import { createApp } from "../src/app.js";
 import { loadEnv } from "../src/config/env.js";
 import { getPrisma } from "../src/db/client.js";
 import { computeBill } from "../src/lib/gst.js";
-import { LogMailer } from "../src/mail/mailer.js";
+import { MemoryMailer } from "../src/mail/mailer.js";
+import { markAsDemo } from "../src/services/demoReset.js";
 import { addMonths } from "../src/services/plans.js";
 
-const EMAIL = process.env["DEMO_LOGIN"] ?? "demo@setutechnology.com";
-const USERNAME = process.env["DEMO_USERNAME"] ?? "demo";
 const PASSWORD = process.env["DEMO_PASSWORD"] ?? "demo-shop-1234";
 const DAYS = Number(process.env["DEMO_DAYS"] ?? 21);
 
@@ -45,7 +48,9 @@ if ((await prisma.plan.count()) === 0) {
   process.exit(1);
 }
 
-const server = createApp({ env, prisma, mailer: new LogMailer() }).listen(0);
+// Emails stay in memory: the seeder reads the staff invite links from it.
+const mailer = new MemoryMailer();
+const server = createApp({ env, prisma, mailer }).listen(0);
 const API = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 const ORIGIN = env.CORS_ORIGINS.split(",")[0]!.trim();
 let token = "";
@@ -133,13 +138,13 @@ const CUSTOMERS = [
 
 try {
   console.log(`Seeding the demo shop on "${dbName}"…`);
-  await call("POST", "/auth/signup", { businessName: "Setu Demo Mart", ownerName: "Demo Owner", email: EMAIL, username: USERNAME, password: PASSWORD, phone: "9000000001" });
-  const user = await prisma.user.update({ where: { username: USERNAME }, data: { emailVerifiedAt: new Date() } });
+  await call("POST", "/auth/signup", { businessName: "Setu Demo Mart", ownerName: "Demo Owner", email: "owner.demo@setutechnology.com", username: "owner", password: PASSWORD, phone: "9000000001" });
+  const user = await prisma.user.update({ where: { username: "owner" }, data: { emailVerifiedAt: new Date() } });
   const platinum = await prisma.plan.findUniqueOrThrow({ where: { code: "platinum" } });
   const started = new Date(Date.now() - (DAYS + 7) * 86_400_000);
   await prisma.subscription.create({ data: { accountId: user.accountId, planId: platinum.id, source: "KEY", startsAt: started, endsAt: addMonths(started, 12) } });
 
-  const login = await call("POST", "/auth/login", { login: USERNAME, password: PASSWORD });
+  const login = await call("POST", "/auth/login", { login: "owner", password: PASSWORD });
   token = login.accessToken;
   const ownerId: string = login.me.user.id;
   await call("PATCH", "/settings", { taxEnabled: true, receiptFooter: "Thank you for shopping at Setu Demo Mart!" });
@@ -148,6 +153,24 @@ try {
   await call("PATCH", `/branches/${b1.id}`, { name: "Indiranagar", address: "100 Feet Road, Indiranagar, Bengaluru 560038", phone: "8041110001", stateCode: "29" });
   const b2 = (await call("POST", "/branches", { name: "Koramangala", address: "80 Feet Road, Koramangala, Bengaluru 560034", phone: "8041110002", stateCode: "29" })).branch as { id: string };
   const branches = [b1.id, b2.id];
+
+  // Staff join through the real invite link, like a shop's staff would.
+  const staff = async (name: string, username: string, role: "MANAGER" | "CASHIER", branchId: string) => {
+    const email = `${username}.demo@setutechnology.com`;
+    await call("POST", "/staff", { name, email, username, role, branchIds: [branchId] });
+    const link = mailer.lastLink(email);
+    const inviteToken = link && new URL(link).searchParams.get("token");
+    if (!inviteToken) throw new Error(`No invite link for ${email}`);
+    const saved = token;
+    token = "";
+    await call("POST", "/auth/accept-invite", { token: inviteToken, password: PASSWORD });
+    token = saved;
+    return (await prisma.user.findUniqueOrThrow({ where: { username } })).id;
+  };
+  const managerId = await staff("Anita Desai", "manager", "MANAGER", b2.id);
+  const cashierId = await staff("Kiran Patil", "cashier", "CASHIER", b1.id);
+  // Who rings up most bills on each branch's counter (the owner covers the rest).
+  const usualCashier = [cashierId, managerId];
 
   const methods = (await call("GET", "/payment-methods")).methods as { id: string; kind: string }[];
   const method = (kind: string) => methods.find((m) => m.kind === kind)!.id;
@@ -211,7 +234,7 @@ try {
         const roll = rand();
         const kind = roll < 0.45 ? "CASH" : roll < 0.85 ? "UPI" : roll < 0.95 ? "CARD" : "CREDIT";
         const customerId = kind === "CREDIT" || rand() < 0.25 ? pick(customers) : null;
-        orders.push({ id: randomUUID(), cashierId: ownerId, invoiceNumber: `${prefix}${String(seq++).padStart(5, "0")}`, createdAt: new Date(at).toISOString(), customerId, taxEnabled: true, discount, lines, payments: [{ methodId: method(kind), amount: total }], total });
+        orders.push({ id: randomUUID(), cashierId: rand() < 0.8 ? usualCashier[i]! : ownerId, invoiceNumber: `${prefix}${String(seq++).padStart(5, "0")}`, createdAt: new Date(at).toISOString(), customerId, taxEnabled: true, discount, lines, payments: [{ methodId: method(kind), amount: total }], total });
       }
       orders.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       if (!orders.length) continue;
@@ -227,7 +250,10 @@ try {
     await call("POST", "/expenses", { id: randomUUID(), branchId: b1.id, spentAt: new Date(now - ago * 86_400_000).toISOString(), category, amount, methodId: method(category === "Transport" ? "CASH" : "UPI") });
   }
 
-  console.log(`Done. Sign in as ${USERNAME} (or ${EMAIL}) / ${PASSWORD}, check it over, then run: npm run demo:dump`);
+  // Marked as the demo's database, so resets may wipe it although it now has a shop.
+  await markAsDemo(prisma, new Date());
+  console.log(`Done. Sign in as owner, manager or cashier / ${PASSWORD}, check it over, then run: npm run demo:dump`);
+  console.log(`Demo app env: VITE_DEMO_LOGIN=Owner=owner|${PASSWORD};Manager=manager|${PASSWORD};Cashier=cashier|${PASSWORD}`);
 } finally {
   server.close();
   await prisma.$disconnect();

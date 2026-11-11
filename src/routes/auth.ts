@@ -193,7 +193,9 @@ export function authRouter(ctx: Ctx, allowedOrigins: Set<string>): Router {
     }
     const ok = await verifyPassword(password, user?.passwordHash ?? null);
     if (!user || !ok) {
-      if (user) {
+      // On the public demo the logins are shown on the sign-in page: never let
+      // a visitor lock them out for everyone (per-IP rate limits still apply).
+      if (user && !ctx.env.DEMO_RESET_ENABLED) {
         const failed = user.failedLogins + 1;
         await ctx.prisma.user.update({
           where: { id: user.id },
