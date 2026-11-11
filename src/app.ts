@@ -4,6 +4,7 @@ import express, { type Express } from "express";
 // Namespace import: helmet ships separate ESM and CommonJS typings, and only
 // `.default` is the middleware in both (Vercel's builder reads the CommonJS ones).
 import * as helmet from "helmet";
+import { pino } from "pino";
 import { pinoHttp } from "pino-http";
 import { corsOrigins, type Env } from "./config/env.js";
 import type { Ctx } from "./context.js";
@@ -35,6 +36,8 @@ import { receiptsRouter } from "./routes/receipts.js";
 import { transfersRouter } from "./routes/transfers.js";
 import { branchReportsRouter } from "./routes/branchReports.js";
 import { VERSION } from "./version.js";
+import { demoResetMiddleware, demoRouter } from "./routes/demo.js";
+import { DemoResetter, type DemoDump } from "./services/demoReset.js";
 
 export type AppDeps = {
   env: Env;
@@ -44,9 +47,17 @@ export type AppDeps = {
   now?: () => Date;
   /** Pings the database; omitted when no database is configured. */
   checkDb?: () => Promise<void>;
+  /** Tests hand the demo snapshot in directly instead of reading the file. */
+  loadDemoDump?: () => DemoDump;
 };
 
-export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Express {
+/** Logs outside a request (the demo reset), in the same JSON shape as pino-http. */
+function logger(env: Env) {
+  const base = pino({ level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL });
+  return { info: (o: object, m: string) => base.info(o, m), error: (o: object, m: string) => base.error(o, m) };
+}
+
+export function createApp({ env, prisma, mailer, now, checkDb, loadDemoDump }: AppDeps): Express {
   const app = express();
   app.disable("x-powered-by");
   // Vercel (and most hosts) sit behind one proxy hop.
@@ -74,6 +85,12 @@ export function createApp({ env, prisma, mailer, now, checkDb }: AppDeps): Expre
   app.use(pinoHttp({ level: env.NODE_ENV === "test" ? "silent" : env.LOG_LEVEL }));
 
   app.use(healthRouter(checkDb));
+
+  // Demo deployment only: wipe and restore the sample shop on schedule.
+  const clock = now ?? (() => new Date());
+  const resetter = env.DEMO_RESET_ENABLED && prisma ? new DemoResetter(env, prisma, clock, logger(env), loadDemoDump) : undefined;
+  if (resetter) app.use(demoResetMiddleware(resetter));
+  app.use(demoRouter(env, clock, resetter));
 
   const openApi = buildOpenApiDocument(VERSION);
   app.get("/openapi.json", (_req, res) => {

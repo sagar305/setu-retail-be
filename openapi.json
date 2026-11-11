@@ -19643,6 +19643,81 @@
           }
         }
       }
+    },
+    "/demo/reset": {
+      "get": {
+        "summary": "When the demo data is next wiped (enabled: false everywhere but the demo)",
+        "tags": [
+          "demo"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean"
+                    },
+                    "intervalHours": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "nextResetAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "secondsUntilReset": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "resetting": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "enabled",
+                    "intervalHours",
+                    "nextResetAt",
+                    "secondsUntilReset",
+                    "resetting"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "webhooks": {}
