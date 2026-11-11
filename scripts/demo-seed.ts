@@ -81,8 +81,14 @@ async function call<T = Record<string, any>>(method: string, path: string, body?
 }
 
 // Same numbers on every run, so two seeds of the demo look alike.
+// mulberry32: exact 32-bit integer steps (a plain LCG overflows JS numbers and skews).
 let state = 20261107;
-const rand = () => ((state = (state * 1_103_515_245 + 12_345) % 2 ** 31) / 2 ** 31);
+const rand = () => {
+  state = (state + 0x6d2b79f5) | 0;
+  let t = Math.imul(state ^ (state >>> 15), 1 | state);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+};
 const pick = <T>(xs: readonly T[]) => xs[Math.floor(rand() * xs.length)]!;
 const between = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
 /** Popular things first: index 0 is picked far more often than the last. */
