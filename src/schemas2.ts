@@ -304,11 +304,13 @@ export const OrderSummaryDto = z.object({
   createdAt: Iso,
   branchId: z.uuid(),
   customerName: z.string(),
+  customerPhone: z.string(),
   total: z.number().int(),
   returnedTotal: z.number().int(),
   cashierId: z.uuid(),
   offline: z.boolean(),
   priceDiffers: z.boolean(),
   paymentMethods: z.array(z.string()),
+  paymentMethodIds: z.array(z.uuid()),
 });
 export const HeldCartDto = z.object({ id: z.uuid(), label: z.string(), payload: HeldCartBody.shape.payload, userId: z.uuid(), createdAt: Iso });
