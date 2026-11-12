@@ -146,10 +146,27 @@ export function catalogueRouter(ctx: Ctx): Router {
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const take = Math.min(Number(req.query.limit) || 500, 2000);
     const skip = Math.max(Number(req.query.offset) || 0, 0);
+    // Stock in this branch: out (none or below zero), low (at or under its alert level) or ok.
+    const stock = req.query.stock;
+    const stockIds =
+      stock === "out" || stock === "low" || stock === "ok"
+        ? (
+            await ctx.prisma.$queryRaw<{ id: string }[]>`
+              SELECT p."id" FROM "products" p
+              LEFT JOIN "branch_products" bp ON bp."productId" = p."id" AND bp."branchId" = ${branch.id}::uuid
+              WHERE p."accountId" = ${a.account.id}::uuid AND p."trackStock"
+                AND CASE ${stock}
+                  WHEN 'out' THEN COALESCE(bp."stockMilli", 0) <= 0
+                  WHEN 'low' THEN COALESCE(bp."stockMilli", 0) > 0 AND COALESCE(bp."stockMilli", 0) <= COALESCE(p."lowStockMilli", ${DEFAULT_LOW_STOCK_MILLI})
+                  ELSE COALESCE(bp."stockMilli", 0) > COALESCE(p."lowStockMilli", ${DEFAULT_LOW_STOCK_MILLI})
+                END`
+          ).map((r) => r.id)
+        : null;
     const where: Prisma.ProductWhereInput = {
       accountId: a.account.id,
       ...(req.query.archived === "true" ? {} : { archivedAt: null }),
-      ...(typeof req.query.categoryId === "string" ? { categoryId: req.query.categoryId } : {}),
+      ...(typeof req.query.categoryId === "string" && req.query.categoryId ? { categoryId: req.query.categoryId === "none" ? null : req.query.categoryId } : {}),
+      ...(stockIds ? { id: { in: stockIds } } : {}),
       ...(q
         ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { sku: { equals: q, mode: "insensitive" } }, { barcode: q }, { hsn: { startsWith: q } }] }
         : {}),

@@ -10676,7 +10676,7 @@
     },
     "/products": {
       "get": {
-        "summary": "Products with this branch's price and stock (?branchId=&q=&categoryId=&limit=&offset=)",
+        "summary": "Products with this branch's price and stock (?branchId=&q=&categoryId= (or none)&stock=out|low|ok&limit=&offset=)",
         "tags": [
           "catalogue"
         ],
@@ -11402,7 +11402,7 @@
     },
     "/customers": {
       "get": {
-        "summary": "Customers (?q= name, phone or GSTIN)",
+        "summary": "Customers (?q= name, phone or GSTIN; &limit=&offset=)",
         "tags": [
           "customers"
         ],
@@ -11932,7 +11932,7 @@
         }
       },
       "get": {
-        "summary": "Bills (?branchId=&from=&to=&status=&q=&before=&limit=); cashiers: own bills today",
+        "summary": "Bills (?branchId=&from=&to=&status=&methodId=&q=&limit=&offset= or &before=); cashiers: own bills today",
         "tags": [
           "orders"
         ],
@@ -11954,10 +11954,18 @@
                       "items": {
                         "$ref": "#/components/schemas/OrderSummary"
                       }
+                    },
+                    "total": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ],
+                      "description": "Matching bills (null with before=)"
                     }
                   },
                   "required": [
-                    "orders"
+                    "orders",
+                    "total"
                   ]
                 }
               }

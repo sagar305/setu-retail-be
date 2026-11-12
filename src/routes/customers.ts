@@ -62,7 +62,8 @@ export function customersRouter(ctx: Ctx): Router {
       ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, ...(digits.length >= 3 ? [{ phone: { contains: digits } }] : []), { gstin: { equals: q.toUpperCase() } }] } : {}),
     };
     const take = Math.min(Number(req.query.limit) || 100, 500);
-    const [rows, total] = await Promise.all([ctx.prisma.customer.findMany({ where, orderBy: { name: "asc" }, take }), ctx.prisma.customer.count({ where })]);
+    const skip = Math.max(Number(req.query.offset) || 0, 0);
+    const [rows, total] = await Promise.all([ctx.prisma.customer.findMany({ where, orderBy: { name: "asc" }, take, skip }), ctx.prisma.customer.count({ where })]);
     res.json({ customers: rows.map(customerDto), total });
   });
 
