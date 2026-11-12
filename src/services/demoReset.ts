@@ -5,23 +5,27 @@
 // the database is wiped and that snapshot restored.
 //
 // - Vercel has no long-running process, so there is no timer: the first request
-//   after a reset time (00:00, 02:00, 04:00 … UTC for 2 hours) does the reset
-//   before it is answered. Nobody visiting means nothing to reset.
-// - Every timestamp and date is moved forward by the time since the snapshot,
-//   so the bills from "today" in the snapshot are today's bills again, the plan
-//   never runs out and expiry dates stay ahead.
+//   after a reset time (daily at 00:00 UTC by default) starts the reset in the
+//   background (routes/demo.ts). Nobody visiting means nothing to reset. A
+//   newly deployed snapshot is loaded at once.
+// - Every timestamp and date is moved forward by whole days (shop's time zone)
+//   so the snapshot's last day is today again, bills keep their time of day,
+//   the plan never runs out and expiry dates stay ahead.
 // - It all runs in one transaction under an advisory lock: other requests see
 //   the old data until the new data is in, and only one instance resets.
 // - It refuses to touch a database whose name isn't DEMO_RESET_EXPECT_DB, or
 //   one with shops in it that was never marked as the demo's (Prisma Postgres
 //   names every database "postgres", so the name alone can't tell them apart).
-import { readFileSync } from "node:fs";
+import { closeSync, createReadStream, openSync, readSync } from "node:fs";
+import { StringDecoder } from "node:string_decoder";
 import { resolve } from "node:path";
-import { gunzipSync } from "node:zlib";
+import { createGunzip } from "node:zlib";
 import type { Env } from "../config/env.js";
 import type { PrismaClient } from "../generated/prisma/client.js";
 
-export const DUMP_FORMAT = 1;
+export const DUMP_FORMAT = 2;
+/** Rows per snapshot line: each line is one upload, so none gets big. */
+const CHUNK_ROWS = 2_000;
 export const STATE_TABLE = "_demo_state";
 /** pg advisory lock id for resets ("SETUDEMO" as a number). */
 const LOCK_KEY = 5_345_544_669n;
@@ -34,9 +38,15 @@ const KEEP_TABLES = new Set(["_prisma_migrations", STATE_TABLE]);
  */
 export const UNCAPTURED_TABLES = new Set(["sessions", "one_time_tokens", "rate_limits", "idempotency_keys", "super_admins", "admin_sessions", "admin_tokens", "admin_audit_logs"]);
 
-export type DumpMeta = { format: number; capturedAt: string; database: string; timezone: string; tables: Record<string, unknown> };
-/** The snapshot file: its parsed metadata, plus the raw text handed to Postgres as is (no bigint rounding). */
-export type DemoDump = { meta: DumpMeta; text: string };
+/**
+ * The snapshot file (gzip): one JSON line of metadata, then lines of
+ * `{"t": table, "rows": [up to CHUNK_ROWS rows]}`, parent tables first. The
+ * file is streamed: only the metadata line is read to check which snapshot is
+ * deployed, and during a restore each line goes to Postgres as it is (no JSON
+ * parsing in Node, so bigints stay exact and memory stays low).
+ */
+export type DumpMeta = { format: number; capturedAt: string; database: string; timezone: string; counts: Record<string, number> };
+export type DemoDump = { meta: DumpMeta; lines: () => AsyncIterable<string> };
 
 type Db = Pick<PrismaClient, "$queryRawUnsafe" | "$executeRawUnsafe">;
 type Column = { table: string; column: string; type: string };
@@ -108,31 +118,104 @@ async function currentDatabase(db: Db): Promise<string> {
 
 // ── Dump ──────────────────────────────────────────────────────────────────
 
-/** The snapshot as text: `{format, capturedAt, database, timezone, tables: {name: [rows…]}}`. */
-export async function dumpDatabase(db: Db, now: Date): Promise<string> {
-  const names = (await tables(db)).filter((t) => !UNCAPTURED_TABLES.has(t));
-  const parts: string[] = [];
+/** The snapshot, line by line (see DemoDump): metadata first, then rows, parent tables first. */
+export async function* dumpLines(db: Db, now: Date): AsyncGenerator<string> {
+  const names = await insertOrder(db, (await tables(db)).filter((t) => !UNCAPTURED_TABLES.has(t)));
+  const counts: Record<string, number> = {};
   for (const t of names) {
-    // Postgres writes the JSON itself, so bigints and json columns come out exactly.
-    const [row] = await db.$queryRawUnsafe<{ rows: string }[]>(`SELECT COALESCE(json_agg(x), '[]'::json)::text AS rows FROM ${q(t)} x`);
-    parts.push(`${JSON.stringify(t)}:${row!.rows}`);
+    const [row] = await db.$queryRawUnsafe<{ n: number }[]>(`SELECT count(*)::int AS n FROM ${q(t)}`);
+    counts[t] = row?.n ?? 0;
   }
   const [tz] = await db.$queryRawUnsafe<{ timezone: string | null }[]>(`SELECT (SELECT timezone FROM accounts ORDER BY "createdAt" LIMIT 1) AS timezone`);
-  const head = { format: DUMP_FORMAT, capturedAt: now.toISOString(), database: await currentDatabase(db), timezone: tz?.timezone ?? "Asia/Kolkata" };
-  return `${JSON.stringify(head).slice(0, -1)},"tables":{${parts.join(",")}}}`;
+  const meta: DumpMeta = { format: DUMP_FORMAT, capturedAt: now.toISOString(), database: await currentDatabase(db), timezone: tz?.timezone ?? "Asia/Kolkata", counts };
+  yield JSON.stringify(meta);
+  for (const t of names) {
+    for (let offset = 0; offset < counts[t]!; offset += CHUNK_ROWS) {
+      // Postgres writes the JSON itself, so bigints and json columns come out exactly.
+      const [row] = await db.$queryRawUnsafe<{ line: string }[]>(
+        // jsonb: one line per chunk (json_agg puts line breaks between rows), bigints exact.
+        `SELECT jsonb_build_object('t', ${`'${t.replace(/'/g, "''")}'`}, 'rows', jsonb_agg(to_jsonb(x)))::text AS line
+         FROM (SELECT * FROM ${q(t)} ORDER BY ctid LIMIT ${CHUNK_ROWS} OFFSET ${offset}) x`,
+      );
+      if (row?.line) yield row.line;
+    }
+  }
 }
 
+/** The whole snapshot as one string (tests, small databases). */
+export async function dumpDatabase(db: Db, now: Date): Promise<string> {
+  const out: string[] = [];
+  for await (const line of dumpLines(db, now)) out.push(line);
+  return out.join("\n") + "\n";
+}
+
+function parseMeta(line: string | undefined): DumpMeta {
+  const meta = (line ? JSON.parse(line) : null) as DumpMeta | null;
+  if (!meta || meta.format !== DUMP_FORMAT || !meta.capturedAt) throw new Error("Not a Setu Retail demo snapshot (re-capture it with npm run demo:dump).");
+  return meta;
+}
+
+/** A snapshot held in memory (tests). */
 export function parseDump(text: string): DemoDump {
-  const meta = JSON.parse(text) as DumpMeta;
-  if (meta.format !== DUMP_FORMAT || !meta.capturedAt || typeof meta.tables !== "object") throw new Error("Not a Setu Retail demo snapshot.");
-  return { meta, text };
+  const lines = text.split("\n").filter(Boolean);
+  const meta = parseMeta(lines[0]);
+  return {
+    meta,
+    lines: async function* () {
+      yield* lines.slice(1);
+    },
+  };
 }
 
-/** Reads the snapshot file (gzip or plain JSON), relative to the project root. */
-export function readDumpFile(path: string): DemoDump {
-  const buf = readFileSync(resolve(process.cwd(), path));
-  const text = buf[0] === 0x1f && buf[1] === 0x8b ? gunzipSync(buf).toString("utf8") : buf.toString("utf8");
-  return parseDump(text);
+/** Lines of the snapshot file (gzip or plain), streamed. */
+async function* fileLines(file: string): AsyncGenerator<string> {
+  const head = Buffer.alloc(2);
+  const fd = openSync(file, "r");
+  try {
+    readSync(fd, head, 0, 2, 0);
+  } finally {
+    closeSync(fd);
+  }
+  const raw = createReadStream(file);
+  const input = head[0] === 0x1f && head[1] === 0x8b ? raw.pipe(createGunzip()) : raw;
+  // Read a piece only once the last line is in: the file never piles up in memory.
+  const decoder = new StringDecoder("utf8");
+  let rest = "";
+  try {
+    for await (const piece of input as AsyncIterable<Buffer>) {
+      rest += decoder.write(piece);
+      let at: number;
+      while ((at = rest.indexOf("\n")) !== -1) {
+        const line = rest.slice(0, at);
+        rest = rest.slice(at + 1);
+        if (line) yield line;
+      }
+    }
+    rest += decoder.end();
+    if (rest) yield rest;
+  } finally {
+    raw.destroy();
+  }
+}
+
+/** The snapshot file, relative to the project root: reads only its first line now, the rest when restoring. */
+export async function readDumpFile(path: string): Promise<DemoDump> {
+  const file = resolve(process.cwd(), path);
+  let first: string | undefined;
+  for await (const line of fileLines(file)) {
+    first = line;
+    break;
+  }
+  return {
+    meta: parseMeta(first),
+    lines: async function* () {
+      let skipped = false;
+      for await (const line of fileLines(file)) {
+        if (skipped) yield line;
+        skipped = true;
+      }
+    },
+  };
 }
 
 // ── Restore ───────────────────────────────────────────────────────────────
@@ -145,11 +228,24 @@ function dayNumber(at: Date, timeZone: string): number {
 
 export type RestoreResult = { status: "restored"; rows: number; shiftedMs: number } | { status: "busy" } | { status: "fresh" };
 
-export async function lastResetAt(db: Db): Promise<Date | null> {
+/** When the demo was last reset, and from which snapshot (null before the first reset). */
+export async function demoState(db: Db): Promise<{ lastResetAt: Date; capturedAt: Date } | null> {
   const [exists] = await db.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT to_regclass(${`'${STATE_TABLE}'`}) IS NOT NULL AS ok`);
   if (!exists?.ok) return null;
-  const [row] = await db.$queryRawUnsafe<{ at: Date }[]>(`SELECT last_reset_at AS at FROM ${q(STATE_TABLE)} WHERE id = 1`);
-  return row?.at ?? null;
+  const [row] = await db.$queryRawUnsafe<{ at: Date; captured: Date }[]>(`SELECT last_reset_at AS at, captured_at AS captured FROM ${q(STATE_TABLE)} WHERE id = 1`);
+  return row ? { lastResetAt: row.at, capturedAt: row.captured } : null;
+}
+
+export async function lastResetAt(db: Db): Promise<Date | null> {
+  return (await demoState(db))?.lastResetAt ?? null;
+}
+
+/**
+ * Nothing to do: reset in this window, from the snapshot now deployed. A newly
+ * deployed snapshot is loaded at once rather than at the next reset time.
+ */
+export function isFresh(state: { lastResetAt: Date; capturedAt: Date } | null, since: Date, dump: DemoDump): boolean {
+  return Boolean(state && state.lastResetAt >= since && state.capturedAt.getTime() === new Date(dump.meta.capturedAt).getTime());
 }
 
 /**
@@ -187,7 +283,7 @@ async function assertDemoDatabase(db: Db, name: string, allowUnmarked: boolean) 
 /**
  * Wipe the database and load the snapshot, shifted to `now`. With
  * `skipIfResetSince`, does nothing when another instance already reset after
- * that time (checked under the lock).
+ * that time from this same snapshot (checked under the lock).
  */
 export async function restoreDatabase(
   prisma: PrismaClient,
@@ -206,40 +302,43 @@ export async function restoreDatabase(
         const [lock] = await tx.$queryRawUnsafe<{ ok: boolean }[]>(`SELECT pg_try_advisory_xact_lock(${LOCK_KEY}) AS ok`);
         if (!lock?.ok) return { status: "busy" } as const;
       }
-      if (opts.skipIfResetSince) {
-        const last = await lastResetAt(tx);
-        if (last && last >= opts.skipIfResetSince) return { status: "fresh" } as const;
-      }
+      if (opts.skipIfResetSince && isFresh(await demoState(tx), opts.skipIfResetSince, dump)) return { status: "fresh" } as const;
 
       const names = await tables(tx);
       const cols = await columns(tx);
-      const order = await insertOrder(tx, names);
-      const shiftedMs = Math.max(0, now.getTime() - new Date(dump.meta.capturedAt).getTime());
+      // Whole days in the shop's time zone: the snapshot's last day becomes today
+      // and every bill keeps its time of day (a reset at 05:30 must not move
+      // the shop's 9-to-9 trading into the night).
       const shiftDays = Math.max(0, dayNumber(now, dump.meta.timezone) - dayNumber(new Date(dump.meta.capturedAt), dump.meta.timezone));
+      const shiftedMs = shiftDays * 86_400_000;
 
       if (names.length) await tx.$executeRawUnsafe(`TRUNCATE ${names.map(q).join(", ")} RESTART IDENTITY CASCADE`);
 
-      // The snapshot goes up once; each table reads its rows from it inside Postgres.
-      await tx.$executeRawUnsafe(`CREATE TEMP TABLE _demo_load (doc jsonb) ON COMMIT DROP`);
-      await tx.$executeRawUnsafe(`INSERT INTO _demo_load (doc) VALUES ($1::jsonb)`, dump.text);
-
+      // Lines come parents first (the order of the snapshot), one upload each.
+      const known = new Set(names);
+      const sqlFor = new Map<string, string>();
       let rows = 0;
-      for (const t of order) {
-        const dumped = dump.meta.tables[t];
-        if (UNCAPTURED_TABLES.has(t) || !Array.isArray(dumped) || !dumped.length) continue;
-        // Only the columns the snapshot has: one added by a later migration takes its default.
-        const keys = new Set(Object.keys(dumped[0] as object));
-        const list = (cols.get(t) ?? []).filter((c) => keys.has(c.column));
-        const select = list.map(({ column, type }) => {
-          const c = `r.${q(column)}`;
-          if (type.startsWith("timestamp")) return `${c} + (${Math.trunc(shiftedMs)}::bigint * interval '1 millisecond')`;
-          if (type === "date") return `${c} + ${Math.trunc(shiftDays)}`;
-          return c;
-        });
-        rows += await tx.$executeRawUnsafe(
-          `INSERT INTO ${q(t)} (${list.map((c) => q(c.column)).join(", ")})
-           SELECT ${select.join(", ")} FROM jsonb_populate_recordset(NULL::${q(t)}, (SELECT doc->'tables'->${`'${t.replace(/'/g, "''")}'`} FROM _demo_load)) r`,
-        );
+      for await (const line of dump.lines()) {
+        const t = /^\{"t"\s*:\s*"([^"]+)"/.exec(line)?.[1];
+        if (!t) throw new Error("Damaged demo snapshot line.");
+        if (UNCAPTURED_TABLES.has(t) || !known.has(t)) continue;
+        let sql = sqlFor.get(t);
+        if (!sql) {
+          // Only the columns the snapshot has: one added by a later migration takes its default.
+          const keyRows = await tx.$queryRawUnsafe<{ k: string }[]>(`SELECT jsonb_object_keys(($1::jsonb)->'rows'->0) AS k`, line);
+          const keys = new Set(keyRows.map((r) => r.k));
+          const list = (cols.get(t) ?? []).filter((c) => keys.has(c.column));
+          const select = list.map(({ column, type }) => {
+            const c = `r.${q(column)}`;
+            if (type.startsWith("timestamp")) return `${c} + (${Math.trunc(shiftedMs)}::bigint * interval '1 millisecond')`;
+            if (type === "date") return `${c} + ${Math.trunc(shiftDays)}`;
+            return c;
+          });
+          sql = `INSERT INTO ${q(t)} (${list.map((c) => q(c.column)).join(", ")})
+           SELECT ${select.join(", ")} FROM jsonb_populate_recordset(NULL::${q(t)}, ($1::jsonb)->'rows') r`;
+          sqlFor.set(t, sql);
+        }
+        rows += await tx.$executeRawUnsafe(sql, line);
       }
 
       // Serial columns (e.g. inventory_logs.seq) carry on after the restored rows.
@@ -252,10 +351,17 @@ export async function restoreDatabase(
         await tx.$executeRawUnsafe(`SELECT setval('${s.seq.replace(/'/g, "''")}', COALESCE((SELECT MAX(${q(s.column)}) FROM ${q(s.table)}), 0) + 1, false)`);
       }
 
+      // A whole-day shift can put something made late on the snapshot's day
+      // later than now: a plan must still have started.
+      if (known.has("subscriptions")) {
+        await tx.$executeRawUnsafe(`UPDATE "subscriptions" SET "startsAt" = $1::timestamptz WHERE "startsAt" > $1::timestamptz AND "startsAt" - $1::timestamptz < interval '1 day'`, now.toISOString());
+      }
+
       await markAsDemo(tx, now, new Date(dump.meta.capturedAt));
       return { status: "restored", rows, shiftedMs } as const;
     },
-    { timeout: 180_000, maxWait: 15_000 },
+    // A big snapshot over the network takes a while; Vercel allows the function 300 s.
+    { timeout: 280_000, maxWait: 15_000 },
   );
 }
 
@@ -270,6 +376,8 @@ type Log = { info: (o: object, m: string) => void; error: (o: object, m: string)
  */
 export class DemoResetter {
   private freshUntil = 0;
+  /** Why the last reset didn't happen, as a short code for /demo/reset (never the raw message). */
+  private problem: string | null = null;
   private running: Promise<void> | null = null;
   private dump: DemoDump | null = null;
 
@@ -278,11 +386,32 @@ export class DemoResetter {
     private readonly prisma: PrismaClient,
     private readonly now: () => Date,
     private readonly log: Log,
-    private readonly load: () => DemoDump = () => readDumpFile(env.DEMO_RESET_DUMP_PATH),
+    private readonly load: () => DemoDump | Promise<DemoDump> = () => readDumpFile(env.DEMO_RESET_DUMP_PATH),
   ) {}
 
+  private restoring = false;
+
+  /** True only while the data is actually being replaced (not during the quick freshness check). */
   get resetting() {
-    return this.running !== null;
+    return this.restoring;
+  }
+
+  /** What's loaded now, for /demo/reset (helps check a demo deploy from a browser). */
+  async describe() {
+    const state = await demoState(this.prisma).catch(() => null);
+    let deployed: string | null;
+    try {
+      this.dump ??= await this.load();
+      deployed = this.dump.meta.capturedAt;
+    } catch {
+      deployed = null;
+    }
+    return {
+      lastResetAt: state?.lastResetAt.toISOString() ?? null,
+      loadedSnapshotAt: state?.capturedAt.toISOString() ?? null,
+      deployedSnapshotAt: deployed ? new Date(deployed).toISOString() : null,
+      problem: this.problem,
+    };
   }
 
   ensureFresh(): Promise<void> {
@@ -299,17 +428,28 @@ export class DemoResetter {
     const boundary = lastBoundary(now, hours);
     const next = nextBoundary(now, hours).getTime();
     try {
-      const last = await lastResetAt(this.prisma);
-      if (last && last >= boundary) {
+      this.dump ??= await this.load();
+      if (isFresh(await demoState(this.prisma), boundary, this.dump)) {
         this.freshUntil = next;
         return;
       }
-      this.dump ??= this.load();
-      const result = await restoreDatabase(this.prisma, this.dump, now, { expectDb: this.env.DEMO_RESET_EXPECT_DB!, skipIfResetSince: boundary });
+      this.restoring = true;
+      const result = await restoreDatabase(this.prisma, this.dump, now, { expectDb: this.env.DEMO_RESET_EXPECT_DB!, skipIfResetSince: boundary }).finally(() => {
+        this.restoring = false;
+      });
       // Another instance is mid-reset: look again in a few seconds.
       this.freshUntil = result.status === "busy" ? now.getTime() + 5_000 : next;
+      this.problem = null;
       if (result.status === "restored") this.log.info({ rows: result.rows, shiftedMs: result.shiftedMs }, "demo data restored");
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.problem = /DEMO_RESET_EXPECT_DB/.test(message)
+        ? "wrong_database_name"
+        : /never set up as the demo/.test(message)
+          ? "database_has_real_shops"
+          : /ENOENT|snapshot/i.test(message)
+            ? "snapshot_missing"
+            : "reset_failed";
       // Never fail the visitor's request over it; try again in a minute.
       this.freshUntil = now.getTime() + 60_000;
       this.log.error({ err }, "demo reset failed");

@@ -2,7 +2,7 @@
   "name": "setu-retail-be",
   "version": "0.1.0",
   "private": true,
-  "description": "Setu Retail cloud POS \u2014 API",
+  "description": "Setu Retail cloud POS — API",
   "type": "module",
   "engines": {
     "node": "22.x"
@@ -30,6 +30,7 @@
     "@asteasolutions/zod-to-openapi": "9.1.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@vercel/functions": "3.10.4",
     "cookie-parser": "1.4.7",
     "cors": "2.8.6",
     "dotenv": "18.0.8",

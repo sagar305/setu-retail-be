@@ -34,6 +34,6 @@ describe("demo reset schedule", () => {
   it("reports no reset outside the demo", async () => {
     const res = await request(testApp()).get("/demo/reset");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false });
+    expect(res.body).toEqual({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false, lastResetAt: null, loadedSnapshotAt: null, deployedSnapshotAt: null, problem: null });
   });
 });

@@ -19,7 +19,7 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
 
   function demoApp(text: string, clock: { now: Date }, expectDb: string) {
     const env = loadEnv({ NODE_ENV: "test", CORS_ORIGINS: APP_ORIGIN, APP_URL: APP_ORIGIN, RATE_LIMITS: "off", DEMO_RESET_ENABLED: "1", DEMO_RESET_EXPECT_DB: expectDb, DEMO_RESET_INTERVAL_HOURS: "2" });
-    return createApp({ env, prisma: db(), mailer: new MemoryMailer(), now: () => clock.now, loadDemoDump: () => parseDump(text) });
+    return createApp({ env, prisma: db(), mailer: new MemoryMailer(), now: () => clock.now, loadDemoDump: () => parseDump(text), demoResetBlocking: true });
   }
 
   it("restores the snapshot dated to now, once per reset time, and signs everyone out", async () => {
@@ -42,8 +42,8 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
 
     const products = await db().product.findMany();
     expect(products.map((p) => p.name)).toEqual(["Kept"]);
-    // Moved forward by exactly the time since the snapshot (2 days 19.5 hours).
-    expect(products[0]!.createdAt.getTime() - before).toBe(clock.now.getTime() - h.clock.now.getTime());
+    // Moved forward by whole days (4 Nov → 7 Nov in India), keeping its time of day.
+    expect(products[0]!.createdAt.getTime() - before).toBe(3 * 86_400_000);
     expect(await db().session.count()).toBe(0);
 
     // The demo login still works after a reset.
@@ -62,6 +62,26 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
     clock.now = new Date("2026-11-07T06:00:01Z");
     await request(app).get("/demo/reset");
     expect((await db().product.findMany()).map((p) => p.name)).toEqual(["Kept"]);
+  });
+
+  it("loads a newly deployed snapshot at once, without waiting for the next reset time", async () => {
+    const h = harness("2026-11-04T10:00:00Z");
+    const owner = await signUpOwner(h);
+    const o = await signIn(h, owner.username);
+    const oldText = await dumpDatabase(db(), new Date("2026-11-04T10:00:00Z"));
+    await o.as("post", "/products").send({ name: "Only in the new snapshot", price: 900 });
+    const newText = await dumpDatabase(db(), new Date("2026-11-05T10:00:00Z"));
+    await markAsDemo(db(), new Date("2026-01-01T00:00:00Z"));
+
+    const clock = { now: new Date("2026-11-07T05:30:00Z") };
+    await request(demoApp(oldText, clock, await dbName())).get("/demo/reset");
+    expect(await db().product.count()).toBe(0);
+
+    // A deploy with the new snapshot, same reset window.
+    clock.now = new Date("2026-11-07T05:40:00Z");
+    const status = await request(demoApp(newText, clock, await dbName())).get("/demo/reset");
+    expect((await db().product.findMany()).map((p) => p.name)).toEqual(["Only in the new snapshot"]);
+    expect(status.body).toMatchObject({ lastResetAt: "2026-11-07T05:40:00.000Z", loadedSnapshotAt: "2026-11-05T10:00:00.000Z", deployedSnapshotAt: "2026-11-05T10:00:00.000Z", problem: null });
   });
 
   it("never locks a demo login, however many wrong passwords are typed", async () => {
@@ -87,6 +107,7 @@ describe.skipIf(!TEST_DB)("demo reset (Postgres)", () => {
     const app = demoApp(text, { now: new Date("2026-11-07T05:30:00Z") }, await dbName());
     const res = await request(app).get("/demo/reset");
     expect(res.status).toBe(200);
+    expect(res.body.problem).toBe("database_has_real_shops");
     expect(await db().product.count()).toBe(1);
   });
 

@@ -1,25 +1,33 @@
+import { waitUntil } from "@vercel/functions";
 import { Router, type RequestHandler } from "express";
 import type { Env } from "../config/env.js";
 import { nextBoundary, type DemoResetter } from "../services/demoReset.js";
 
 /**
  * Runs before every request on the demo deployment so the data is reset on
- * schedule (see services/demoReset.ts). Health checks don't trigger it.
+ * schedule (see services/demoReset.ts), in the background. Health checks
+ * don't trigger it. Tests pass background=false to wait for it.
  */
-export function demoResetMiddleware(resetter: DemoResetter): RequestHandler {
+export function demoResetMiddleware(resetter: DemoResetter, background = true): RequestHandler {
   return (req, _res, next) => {
     if (req.path.startsWith("/health") || req.path === "/openapi.json") return next();
-    resetter.ensureFresh().then(() => next(), next);
+    const done = resetter.ensureFresh();
+    if (!background) return void done.then(() => next(), next);
+    // The reset runs in one transaction, so visitors keep the old data until
+    // the new data is in: nobody waits for it. waitUntil keeps the Vercel
+    // function alive until it's done (a plain promise elsewhere).
+    waitUntil(done);
+    next();
   };
 }
 
 /** When the demo data is next wiped, for the countdown in the web app. Off everywhere but the demo. */
 export function demoRouter(env: Env, now: () => Date, resetter?: DemoResetter): Router {
   const router = Router();
-  router.get("/demo/reset", (_req, res) => {
+  router.get("/demo/reset", async (_req, res) => {
     res.set("Cache-Control", "no-store");
     if (!env.DEMO_RESET_ENABLED || !resetter) {
-      res.json({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false });
+      res.json({ enabled: false, intervalHours: null, nextResetAt: null, secondsUntilReset: null, resetting: false, lastResetAt: null, loadedSnapshotAt: null, deployedSnapshotAt: null, problem: null });
       return;
     }
     const at = now();
@@ -30,6 +38,7 @@ export function demoRouter(env: Env, now: () => Date, resetter?: DemoResetter): 
       nextResetAt: next.toISOString(),
       secondsUntilReset: Math.max(0, Math.ceil((next.getTime() - at.getTime()) / 1000)),
       resetting: resetter.resetting,
+      ...(await resetter.describe()),
     });
   });
   return router;

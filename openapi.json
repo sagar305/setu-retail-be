@@ -19683,6 +19683,33 @@
                     },
                     "resetting": {
                       "type": "boolean"
+                    },
+                    "lastResetAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "loadedSnapshotAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "deployedSnapshotAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "format": "date-time"
+                    },
+                    "problem": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -19690,7 +19717,11 @@
                     "intervalHours",
                     "nextResetAt",
                     "secondsUntilReset",
-                    "resetting"
+                    "resetting",
+                    "lastResetAt",
+                    "loadedSnapshotAt",
+                    "deployedSnapshotAt",
+                    "problem"
                   ]
                 }
               }
