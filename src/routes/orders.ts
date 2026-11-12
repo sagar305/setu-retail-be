@@ -227,6 +227,8 @@ export function ordersRouter(ctx: Ctx): Router {
     const branchIds = typeof req.query.branchId === "string" ? [branchFor(a, req.query.branchId).id] : a.branches.map((b) => b.id);
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
     const take = Math.min(Number(req.query.limit) || 50, 200);
+    const skip = Math.min(Math.max(Number(req.query.offset) || 0, 0), 1_000_000);
+    const methodId = typeof req.query.methodId === "string" && /^[0-9a-f-]{36}$/i.test(req.query.methodId) ? req.query.methodId : null;
     const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
     const to = typeof req.query.to === "string" ? new Date(req.query.to) : undefined;
     const cashierOnly = a.user.role === "CASHIER";
@@ -243,14 +245,22 @@ export function ordersRouter(ctx: Ctx): Router {
       createdAt: { gte, lt },
       ...(req.query.status === "CANCELLED" || req.query.status === "COMPLETED" ? { status: req.query.status } : {}),
       ...(q ? { OR: [{ invoiceNumber: { contains: q.toUpperCase() } }, { customerName: { contains: q, mode: "insensitive" } }, { customerPhone: { contains: q.replace(/\D/g, "") || q } }] } : {}),
+      // Paid (at least partly) by this method.
+      ...(methodId ? { payments: { some: { methodId } } } : {}),
     };
-    const rows = await ctx.prisma.order.findMany({
+    // The count is for page numbers; "Load older" callers (before=…) don't need it.
+    const [rows, total] = await Promise.all([
+      ctx.prisma.order.findMany({
       where,
       orderBy: { createdAt: "desc" },
       take,
+      skip,
       select: { id: true, invoiceNumber: true, status: true, createdAt: true, branchId: true, customerName: true, total: true, returnedTotal: true, cashierId: true, offline: true, priceDiffers: true, payments: { select: { methodName: true } } },
-    });
+      }),
+      before ? Promise.resolve(null) : ctx.prisma.order.count({ where }),
+    ]);
     res.json({
+      total,
       orders: rows.map((o) => ({
         id: o.id,
         invoiceNumber: o.invoiceNumber,

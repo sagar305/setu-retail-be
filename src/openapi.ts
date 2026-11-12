@@ -142,7 +142,7 @@ route("get", "/categories", "Product categories", { tag: "catalogue", ok: z.obje
 route("post", "/categories", "Add a category", { tag: "catalogue", body: P.CategoryBody, ok: z.object({ category: Category }), status: 201 });
 route("patch", "/categories/{id}", "Rename a category", { tag: "catalogue", body: P.CategoryBody, ok: z.object({ category: Category }) });
 route("delete", "/categories/{id}", "Remove a category", { tag: "catalogue", ok: null, status: 204 });
-route("get", "/products", "Products with this branch's price and stock (?branchId=&q=&categoryId=&limit=&offset=)", { tag: "catalogue", ok: z.object({ products: z.array(Product), total: z.number().int() }) });
+route("get", "/products", "Products with this branch's price and stock (?branchId=&q=&categoryId= (or none)&stock=out|low|ok&limit=&offset=)", { tag: "catalogue", ok: z.object({ products: z.array(Product), total: z.number().int() }) });
 route("get", "/products/{id}", "A product with price and stock per branch", { tag: "catalogue", ok: z.object({ product: Product, branches: z.array(z.object({ branchId: z.string(), code: z.string(), name: z.string(), price: z.number().nullable(), stockMilli: z.number(), withinPlan: z.boolean() })) }) });
 route("post", "/products", "Add a product (owner/manager; plan limit applies)", { tag: "catalogue", body: P.ProductBody, ok: z.object({ product: Product }), status: 201 });
 route("patch", "/products/{id}", "Edit a product", { tag: "catalogue", body: P.ProductPatchBody, ok: z.object({ product: Product }) });
@@ -151,13 +151,13 @@ route("put", "/products/{id}/branches/{branchId}", "Set or clear a branch's own 
 route("post", "/products/{id}/stock", "Add, reduce or set a branch's stock", { tag: "catalogue", body: P.StockAdjustBody, ok: z.object({ stockMilli: z.number().int() }) });
 route("get", "/products/{id}/stock-history", "Stock movements in a branch (?branchId=)", { tag: "catalogue", ok: z.object({ history: z.array(z.object({ id: z.string(), type: z.string(), changeMilli: z.number(), stockAfterMilli: z.number(), note: z.string(), refId: z.string().nullable(), createdAt: z.string() })) }) });
 
-route("get", "/customers", "Customers (?q= name, phone or GSTIN)", { tag: "customers", ok: z.object({ customers: z.array(Customer), total: z.number().int() }) });
+route("get", "/customers", "Customers (?q= name, phone or GSTIN; &limit=&offset=)", { tag: "customers", ok: z.object({ customers: z.array(Customer), total: z.number().int() }) });
 route("get", "/customers/{id}", "A customer", { tag: "customers", ok: z.object({ customer: Customer }) });
 route("post", "/customers", "Add a customer (any role; plan limit applies)", { tag: "customers", body: P.CustomerBody, ok: z.object({ customer: Customer }), status: 201 });
 route("patch", "/customers/{id}", "Edit a customer (owner/manager)", { tag: "customers", body: P.CustomerPatchBody, ok: z.object({ customer: Customer }) });
 
 route("post", "/orders", "Create a bill (idempotent on id)", { tag: "orders", body: P.OrderBody, ok: z.object({ order: Order, replayed: z.boolean().optional() }), status: 201 });
-route("get", "/orders", "Bills (?branchId=&from=&to=&status=&q=&before=&limit=); cashiers: own bills today", { tag: "orders", ok: z.object({ orders: z.array(OrderSummary) }) });
+route("get", "/orders", "Bills (?branchId=&from=&to=&status=&methodId=&q=&limit=&offset= or &before=); cashiers: own bills today", { tag: "orders", ok: z.object({ orders: z.array(OrderSummary), total: z.number().int().nullable().describe("Matching bills (null with before=)") }) });
 route("get", "/orders/{id}", "A bill with items, payments and credit notes", { tag: "orders", ok: z.object({ order: Order }) });
 route("post", "/orders/{id}/cancel", "Cancel a bill and put stock back (owner/manager)", { tag: "orders", body: P.CancelBody, ok: z.object({ order: Order }) });
 route("post", "/orders/{id}/returns", "Return items: issues a GST credit note (owner/manager)", { tag: "orders", body: P.ReturnBody, ok: z.object({ order: Order }), status: 201 });
