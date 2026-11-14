@@ -226,7 +226,8 @@ export function ordersRouter(ctx: Ctx): Router {
     const a = auth(req);
     const branchIds = typeof req.query.branchId === "string" ? [branchFor(a, req.query.branchId).id] : a.branches.map((b) => b.id);
     const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
-    const take = Math.min(Number(req.query.limit) || 50, 200);
+    // Up to 1,000 a call so the app can load the last few months in a few calls.
+    const take = Math.min(Number(req.query.limit) || 50, 1000);
     const skip = Math.min(Math.max(Number(req.query.offset) || 0, 0), 1_000_000);
     const methodId = typeof req.query.methodId === "string" && /^[0-9a-f-]{36}$/i.test(req.query.methodId) ? req.query.methodId : null;
     const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
@@ -255,7 +256,7 @@ export function ordersRouter(ctx: Ctx): Router {
       orderBy: { createdAt: "desc" },
       take,
       skip,
-      select: { id: true, invoiceNumber: true, status: true, createdAt: true, branchId: true, customerName: true, total: true, returnedTotal: true, cashierId: true, offline: true, priceDiffers: true, payments: { select: { methodName: true } } },
+      select: { id: true, invoiceNumber: true, status: true, createdAt: true, branchId: true, customerName: true, customerPhone: true, total: true, returnedTotal: true, cashierId: true, offline: true, priceDiffers: true, payments: { select: { methodName: true, methodId: true } } },
       }),
       before ? Promise.resolve(null) : ctx.prisma.order.count({ where }),
     ]);
@@ -268,12 +269,15 @@ export function ordersRouter(ctx: Ctx): Router {
         createdAt: o.createdAt.toISOString(),
         branchId: o.branchId,
         customerName: o.customerName,
+        customerPhone: o.customerPhone,
         total: o.total,
         returnedTotal: o.returnedTotal,
         cashierId: o.cashierId,
         offline: o.offline,
         priceDiffers: o.priceDiffers,
         paymentMethods: [...new Set(o.payments.map((p) => p.methodName))],
+        /** For filtering by payment method in the app. */
+        paymentMethodIds: [...new Set(o.payments.map((p) => p.methodId).filter((x): x is string => Boolean(x)))],
       })),
     });
   });

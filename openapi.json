@@ -1783,6 +1783,9 @@
           "customerName": {
             "type": "string"
           },
+          "customerPhone": {
+            "type": "string"
+          },
           "total": {
             "type": "integer"
           },
@@ -1804,6 +1807,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "paymentMethodIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
           }
         },
         "required": [
@@ -1813,12 +1823,14 @@
           "createdAt",
           "branchId",
           "customerName",
+          "customerPhone",
           "total",
           "returnedTotal",
           "cashierId",
           "offline",
           "priceDiffers",
-          "paymentMethods"
+          "paymentMethods",
+          "paymentMethodIds"
         ]
       },
       "HeldCart": {
